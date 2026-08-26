@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traffic Sign Recognition (KNN)</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Title Header -->
+        <header class="header">
+            <h1>Traffic Sign Recognition</h1>
+            <p>Practical Computer Vision with K-Nearest Neighbors (KNN + HOG Features)</p>
+        </header>
+
+        <!-- Main Card -->
+        <main class="card">
+            <!-- Upload Drop Zone -->
+            <div class="drop-zone" id="dropZone">
+                <input type="file" id="fileInput" accept="image/*" class="file-input">
+                <div class="drop-content" id="dropContent">
+                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <p class="drop-text">Drag & drop traffic sign image here, or <span>browse</span></p>
+                    <span class="drop-hint">Supports PNG, JPG, JPEG</span>
+                </div>
+                <!-- Image Preview Area -->
+                <div class="preview-wrapper hidden" id="previewWrapper">
+                    <img id="imagePreview" class="preview-img" alt="Traffic Sign Preview">
+                    <button type="button" class="btn-clear" id="btnClear" title="Clear image">&times;</button>
+                </div>
+            </div>
+
+            <!-- Quick Demo Sample Buttons -->
+            <div class="samples-bar">
+                <span class="samples-title">Or try a sample sign:</span>
+                <div class="samples-list" id="samplesList">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </div>
+
+            <!-- Classify Action Button -->
+            <button id="btnClassify" class="btn-classify" disabled>
+                <span>Run KNN Prediction</span>
+            </button>
+
+            <!-- Prediction Result Display Area -->
+            <div class="result-area" id="resultArea">
+                <div class="result-placeholder" id="resultPlaceholder">
+                    Upload an image or pick a sample to view classification results.
+                </div>
+                <div class="result-card hidden" id="resultCard">
+                    <div class="result-header">
+                        <div class="result-badge">Detected Sign</div>
+                        <div class="result-time" id="resTime">-- ms</div>
+                    </div>
+                    <div class="result-name" id="resName">--</div>
+                    <div class="metrics-row">
+                        <div class="metric">
+                            <span class="metric-label">Confidence</span>
+                            <span class="metric-value" id="resConfidence">--%</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Nearest Distance</span>
+                            <span class="metric-value" id="resDist">--</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Algorithm</span>
+                            <span class="metric-value">HOG + KNN (K=3)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/script.js"></script>
+</body>
+</html>
