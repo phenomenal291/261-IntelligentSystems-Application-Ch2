@@ -1,7 +1,7 @@
 """
 Traffic Sign Recognition - Model Training Script
-Extracts HOG (Histogram of Oriented Gradients) features and trains a KNN Classifier.
-Exports the trained model and exemplar metadata to models/knn_traffic_sign_model.pkl.
+Extracts HOG features and stores training vectors, labels, and image paths.
+Exports the model payload to models/knn_traffic_sign_model.pkl.
 """
 
 import os
@@ -30,7 +30,7 @@ CLASS_NAMES = {
 def extract_features_from_image(img_input, return_hog_image=False):
     """
     Extracts HOG (Histogram of Oriented Gradients) feature vector from image.
-    Optionally returns the 2D HOG visualization array.
+    Optionally returns the 2D HOG visualization array and resized image.
     """
     if isinstance(img_input, str):
         img = Image.open(img_input).convert("RGB")
@@ -78,7 +78,6 @@ def load_dataset(data_dir):
             feat = extract_features_from_image(img_p)
             features.append(feat)
             labels.append(cls_name)
-            # Store relative path for portability
             rel_p = os.path.relpath(img_p, os.path.dirname(os.path.abspath(__file__)))
             image_paths.append(rel_p)
 
@@ -90,42 +89,34 @@ def train_and_export():
     models_dir = os.path.join(base_dir, "models")
     os.makedirs(models_dir, exist_ok=True)
 
-    print("Step 1: Loading images & extracting HOG descriptors...")
+    print("Step 1: Extracting HOG features from training images...")
     X, y, img_paths = load_dataset(data_dir)
     print(f"Loaded {len(X)} samples with {X.shape[1]} HOG features across {len(np.unique(y))} classes.")
 
-    # Train / Test split
-    indices = np.arange(len(X))
-    idx_tr, idx_te = train_test_split(indices, test_size=0.15, random_state=42, stratify=y)
+    # Train / Test split evaluation
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=42, stratify=y)
+    knn_eval = KNeighborsClassifier(n_neighbors=3, metric='euclidean', weights='distance')
+    knn_eval.fit(X_train, y_train)
+    test_acc = accuracy_score(y_test, knn_eval.predict(X_test))
+    print(f"Hold-out Test Accuracy (K=3, Euclidean): {test_acc * 100:.2f}%")
 
-    X_train, y_train = X[idx_tr], y[idx_tr]
-    X_test, y_test = X[idx_te], y[idx_te]
-    train_paths = [img_paths[i] for i in idx_tr]
-
-    print("\nStep 2: Fitting KNeighborsClassifier (K=3, Euclidean, Distance-Weighted)...")
-    knn_model = KNeighborsClassifier(n_neighbors=3, metric='euclidean', weights='distance')
-    knn_model.fit(X_train, y_train)
-
-    y_pred = knn_model.predict(X_test)
-    test_acc = accuracy_score(y_test, y_pred)
-    print(f"Hold-out Test Accuracy: {test_acc * 100:.2f}%")
-
-    # Fit final model on all data so all exemplars are available for nearest neighbor retrieval
+    # Fit full model
     knn_full = KNeighborsClassifier(n_neighbors=3, metric='euclidean', weights='distance')
     knn_full.fit(X, y)
 
     model_payload = {
         "model": knn_full,
+        "X_train": X,
+        "y_train": y,
         "class_names": CLASS_NAMES,
-        "classes_": knn_full.classes_,
+        "classes_": np.unique(y),
         "feature_dim": X.shape[1],
-        "train_image_paths": img_paths,
-        "y_train": y
+        "train_image_paths": img_paths
     }
 
     model_path = os.path.join(models_dir, "knn_traffic_sign_model.pkl")
     joblib.dump(model_payload, model_path)
-    print(f"\nStep 3: Model & exemplar gallery successfully exported to: {model_path}")
+    print(f"Step 2: Model & training vectors successfully exported to: {model_path}")
 
 if __name__ == "__main__":
     train_and_export()

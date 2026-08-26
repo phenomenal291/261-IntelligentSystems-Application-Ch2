@@ -1,6 +1,7 @@
 /**
  * Traffic Sign KNN Recognition Client Script
- * Includes Clipboard Paste Support & Educational Pipeline Visualizer
+ * Features: Clipboard Paste Support, Custom KNN Hyperparameters (K, Metric, Voting),
+ * and Dynamic Nearest Neighbor Exemplar Gallery
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -19,15 +20,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const samplesList = document.getElementById('samplesList');
     const toast = document.getElementById('toast');
 
-    // Stepper elements
-    const pipelineStepper = document.getElementById('pipelineStepper');
-    const step1 = document.getElementById('step1');
-    const step2 = document.getElementById('step2');
-    const step3 = document.getElementById('step3');
-    const step4 = document.getElementById('step4');
-    const line1 = document.getElementById('line1');
-    const line2 = document.getElementById('line2');
-    const line3 = document.getElementById('line3');
+    // Hyperparameter controls
+    const kSlider = document.getElementById('kSlider');
+    const kBadge = document.getElementById('kBadge');
+    const metricSelect = document.getElementById('metricSelect');
+    const weightsSelect = document.getElementById('weightsSelect');
 
     // Result elements
     const resultPlaceholder = document.getElementById('resultPlaceholder');
@@ -37,6 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const resTime = document.getElementById('resTime');
     const origThumb = document.getElementById('origThumb');
     const hogThumb = document.getElementById('hogThumb');
+    const neighborsTitle = document.getElementById('neighborsTitle');
+    const activeParamsTag = document.getElementById('activeParamsTag');
     const neighborsGrid = document.getElementById('neighborsGrid');
 
     function showToast(message) {
@@ -44,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toast.classList.remove('hidden');
         setTimeout(() => {
             toast.classList.add('hidden');
-        }, 2500);
+        }, 2200);
     }
 
     // 1. Fetch & Render Demo Sample Chips
@@ -142,12 +141,11 @@ document.addEventListener('DOMContentLoaded', () => {
         dropContent.classList.add('hidden');
         previewWrapper.classList.remove('hidden');
         btnClassify.disabled = false;
-        btnClassify.innerHTML = '<span>⚡ Run KNN Recognition Pipeline</span>';
+        btnClassify.innerHTML = '<span>⚡ Run KNN Classification</span>';
         
         // Reset results on new image
         resultCard.classList.add('hidden');
         resultPlaceholder.classList.remove('hidden');
-        pipelineStepper.classList.add('hidden');
     }
 
     // 6. Clear Button
@@ -167,47 +165,47 @@ document.addEventListener('DOMContentLoaded', () => {
         scanBar.classList.add('hidden');
         resultCard.classList.add('hidden');
         resultPlaceholder.classList.remove('hidden');
-        pipelineStepper.classList.add('hidden');
     }
 
-    // 7. Run Pipeline with Educational Step-by-Step Animation
+    // 7. Parameter Listeners
+    kSlider.addEventListener('input', (e) => {
+        kBadge.textContent = e.target.value;
+        if (currentImageFile && !resultCard.classList.contains('hidden')) {
+            runPrediction();
+        }
+    });
+
+    metricSelect.addEventListener('change', () => {
+        if (currentImageFile && !resultCard.classList.contains('hidden')) {
+            runPrediction();
+        }
+    });
+
+    weightsSelect.addEventListener('change', () => {
+        if (currentImageFile && !resultCard.classList.contains('hidden')) {
+            runPrediction();
+        }
+    });
+
+    // 8. Run KNN Prediction with Custom Parameters
     btnClassify.addEventListener('click', runPrediction);
-
-    function setStep(stepNum) {
-        [step1, step2, step3, step4].forEach((s, idx) => {
-            s.classList.remove('active', 'done');
-            if (idx + 1 < stepNum) s.classList.add('done');
-            else if (idx + 1 === stepNum) s.classList.add('active');
-        });
-        [line1, line2, line3].forEach((l, idx) => {
-            if (idx + 1 < stepNum) l.classList.add('active');
-            else l.classList.remove('active');
-        });
-    }
 
     async function runPrediction() {
         if (!currentImageFile) return;
 
         btnClassify.disabled = true;
-        btnClassify.textContent = 'Processing Pipeline...';
+        btnClassify.textContent = 'Classifying...';
         scanBar.classList.remove('hidden');
-        pipelineStepper.classList.remove('hidden');
-        resultPlaceholder.classList.add('hidden');
-        resultCard.classList.add('hidden');
 
-        // Step 1: Preprocessing
-        setStep(1);
-        await new Promise(r => setTimeout(r, 250));
-
-        // Step 2: HOG extraction
-        setStep(2);
-        await new Promise(r => setTimeout(r, 300));
-
-        // Step 3: Compute distances
-        setStep(3);
+        const k = parseInt(kSlider.value) || 3;
+        const metric = metricSelect.value;
+        const weights = weightsSelect.value;
 
         const formData = new FormData();
         formData.append('image', currentImageFile);
+        formData.append('k', k);
+        formData.append('metric', metric);
+        formData.append('weights', weights);
 
         try {
             const response = await fetch('/predict', {
@@ -216,10 +214,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             const data = await response.json();
-
-            // Step 4: Majority Voting
-            setStep(4);
-            await new Promise(r => setTimeout(r, 250));
 
             if (data.success) {
                 renderResults(data);
@@ -234,11 +228,11 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             scanBar.classList.add('hidden');
             btnClassify.disabled = false;
-            btnClassify.innerHTML = '<span>⚡ Run KNN Recognition Pipeline</span>';
+            btnClassify.innerHTML = '<span>⚡ Run KNN Classification</span>';
         }
     }
 
-    // 8. Render Rich Educational Results
+    // 9. Render Rich Results & Dynamic Top-K Neighbor Gallery
     function renderResults(data) {
         resultPlaceholder.classList.add('hidden');
         resultCard.classList.remove('hidden');
@@ -248,13 +242,19 @@ document.addEventListener('DOMContentLoaded', () => {
         resConfidence.textContent = `${data.confidence}%`;
         resTime.textContent = `${data.inference_time_ms} ms`;
 
+        // Active Parameters Tag
+        const metricName = data.metric.charAt(0).toUpperCase() + data.metric.slice(1);
+        const weightName = data.weights === 'distance' ? 'Weighted' : 'Uniform';
+        activeParamsTag.textContent = `K=${data.k} • ${metricName} • ${weightName}`;
+        neighborsTitle.textContent = `Top ${data.k} Nearest Neighbors in Feature Space`;
+
         // HOG Feature Map Visualizer
         origThumb.src = currentImageSrc;
         if (data.hog_image_b64) {
             hogThumb.src = `data:image/png;base64,${data.hog_image_b64}`;
         }
 
-        // K=3 Nearest Neighbors Gallery
+        // Render Dynamic Neighbors Gallery
         neighborsGrid.innerHTML = '';
         if (data.neighbors && data.neighbors.length > 0) {
             data.neighbors.forEach(n => {
@@ -264,10 +264,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const imgSrc = n.image_b64 ? `data:image/png;base64,${n.image_b64}` : '/static/img/placeholder.png';
                 
                 card.innerHTML = `
-                    <div class="neighbor-rank">Rank #${n.rank}</div>
+                    <div class="neighbor-rank">#${n.rank}</div>
                     <img src="${imgSrc}" class="neighbor-img" alt="${n.class_name}">
-                    <div class="neighbor-name">${n.class_name}</div>
-                    <div class="neighbor-dist">d = ${n.distance.toFixed(4)}</div>
+                    <div class="neighbor-name" title="${n.class_name}">${n.class_name}</div>
+                    <div class="neighbor-dist">d = ${n.distance.toFixed(3)}</div>
                     <div class="neighbor-dist">w = ${n.weight}</div>
                 `;
                 neighborsGrid.appendChild(card);

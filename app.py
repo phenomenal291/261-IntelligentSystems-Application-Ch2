@@ -1,6 +1,6 @@
 """
 Traffic Sign Recognition Web Application
-Flask Server with HOG Feature Visualization & Top-K Nearest Neighbor Exemplar Gallery
+Lightweight Flask Server with Dynamic KNN Parameters & Visual Exemplar Gallery
 """
 
 import os
@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from sklearn.metrics.pairwise import pairwise_distances
 import joblib
 
 try:
@@ -26,17 +27,17 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "models", "knn_traffic_sign_model.pkl")
 SAMPLES_DIR = os.path.join(BASE_DIR, "data", "test_samples")
 
-print(f"Loading pre-trained KNN model from {MODEL_PATH}...")
+print(f"Loading pre-trained model payload from {MODEL_PATH}...")
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model not found at {MODEL_PATH}. Please run `python train.py` first.")
 
 model_payload = joblib.load(MODEL_PATH)
-knn_model = model_payload["model"]
+X_train = model_payload["X_train"]
+y_train = model_payload["y_train"]
 class_names_map = model_payload["class_names"]
 classes_list = list(model_payload["classes_"])
 train_image_paths = model_payload.get("train_image_paths", [])
-y_train_labels = model_payload.get("y_train", [])
-print(f"Model loaded successfully! ({len(classes_list)} classes, {len(train_image_paths)} exemplar images)")
+print(f"Model payload loaded! ({len(X_train)} training vectors, {len(classes_list)} classes)")
 
 def render_hog_to_base64(hog_image):
     fig, ax = plt.subplots(figsize=(2.5, 2.5), dpi=90)
@@ -90,38 +91,62 @@ def predict():
     if file.filename == "":
         return jsonify({"success": False, "error": "Empty filename."}), 400
 
+    # Read user-customized KNN parameters
+    k_val = int(request.form.get("k", 3))
+    k_val = max(1, min(k_val, min(15, len(X_train))))
+    
+    metric = request.form.get("metric", "euclidean").lower()
+    if metric not in ["euclidean", "manhattan", "cosine"]:
+        metric = "euclidean"
+        
+    weights = request.form.get("weights", "distance").lower()
+
     try:
-        # Load image & compute HOG with visualization
+        # 1. Feature Extraction & HOG Map
         img = Image.open(io.BytesIO(file.read())).convert("RGB")
         features, hog_img_arr, resized_img = extract_features_from_image(img, return_hog_image=True)
         feat_vector = features.reshape(1, -1)
 
-        # KNN Inference
-        pred_label = knn_model.predict(feat_vector)[0]
-        pred_name = class_names_map.get(pred_label, pred_label)
-        
-        # Probabilities & Confidence
-        probs = knn_model.predict_proba(feat_vector)[0]
-        confidence = float(np.max(probs) * 100.0)
-        
-        # Find K=3 Nearest Neighbors & Distances
-        k_neighbors = 3
-        dists, indices = knn_model.kneighbors(feat_vector, n_neighbors=k_neighbors)
-        
-        # Build educational neighbor breakdowns
+        # 2. Dynamic Distance Computation in Feature Space
+        dists = pairwise_distances(feat_vector, X_train, metric=metric)[0]
+
+        # 3. Sort & Select Top-K Nearest Neighbors
+        sorted_indices = np.argsort(dists)[:k_val]
+        top_k_indices = sorted_indices
+        top_k_dists = dists[top_k_indices]
+        top_k_labels = y_train[top_k_indices]
+
+        # 4. Voting Mechanism (Uniform vs Distance-Weighted)
+        eps = 1e-6
+        if weights == "distance":
+            vote_weights = 1.0 / (top_k_dists + eps)
+        else:
+            vote_weights = np.ones(k_val, dtype=float)
+
+        # Aggregate class vote scores
+        class_scores = {}
+        for lbl, w in zip(top_k_labels, vote_weights):
+            class_scores[lbl] = class_scores.get(lbl, 0.0) + w
+
+        total_weight_sum = np.sum(vote_weights)
+        winning_class_key = max(class_scores, key=class_scores.get)
+        winning_score = class_scores[winning_class_key]
+        confidence = float((winning_score / total_weight_sum) * 100.0) if total_weight_sum > 0 else 100.0
+
+        # 5. Build K Nearest Neighbor Exemplar Cards
         neighbors_info = []
-        for rank, (idx, d) in enumerate(zip(indices[0], dists[0]), start=1):
-            n_label = y_train_labels[idx] if idx < len(y_train_labels) else "unknown"
+        for rank, (idx, d, w) in enumerate(zip(top_k_indices, top_k_dists, vote_weights), start=1):
+            n_label = y_train[idx]
             n_name = class_names_map.get(n_label, n_label)
             n_img_rel = train_image_paths[idx] if idx < len(train_image_paths) else ""
             n_b64 = image_to_base64(n_img_rel) if n_img_rel else ""
-            
-            weight = round(1.0 / (float(d) + 1e-5), 2)
+
             neighbors_info.append({
                 "rank": rank,
                 "class_name": n_name,
+                "class_key": n_label,
                 "distance": round(float(d), 4),
-                "weight": weight,
+                "weight": round(float(w), 3) if weights == "distance" else "1.0",
                 "image_b64": n_b64
             })
 
@@ -130,11 +155,13 @@ def predict():
 
         return jsonify({
             "success": True,
-            "predicted_class": pred_name,
-            "class_key": pred_label,
+            "predicted_class": class_names_map.get(winning_class_key, winning_class_key),
+            "class_key": winning_class_key,
             "confidence": round(confidence, 1),
             "inference_time_ms": round(inference_time_ms, 1),
-            "feature_dim": len(features),
+            "k": k_val,
+            "metric": metric,
+            "weights": weights,
             "hog_image_b64": hog_b64,
             "neighbors": neighbors_info
         })
