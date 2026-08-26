@@ -1,7 +1,4 @@
 # Traffic Sign Recognition System using K-Nearest Neighbors (KNN)
-### Practical Computer Vision Application • CO3061 Intelligent Systems
-
-An end-to-end, lightweight web application that classifies road traffic signs in real time using **Histogram of Oriented Gradients (HOG)** feature extraction and a **K-Nearest Neighbors (KNN)** classifier with customizable hyperparameters.
 
 ---
 
@@ -73,8 +70,8 @@ The system recognizes 10 standard traffic sign categories:
 
 ### 1. Clone the Repository
 ```bash
-git clone <your-github-repo-url>
-cd traffic_sign_knn_app
+git clone https://github.com/phenomenal291/261-IntelligentSystems-Application-Ch2
+cd 261-IntelligentSystems-Application-Ch2
 ```
 
 ### 2. Set Up Virtual Environment (Recommended)
@@ -159,4 +156,4 @@ http://127.0.0.1:5000
 
 ## 🎓 Academic Context
 
-Developed for **CO3061: Intelligent Systems (Hệ thống Thông minh)** at **Ho Chi Minh City University of Technology (HCMUT)** to demonstrate practical instance-based learning (K-Nearest Neighbors) combined with classical computer vision feature descriptors.
+Developed for **CO3061: Intelligent Systems** at **Ho Chi Minh City University of Technology (HCMUT)** to demonstrate practical instance-based learning (K-Nearest Neighbors) combined with classical computer vision feature descriptors.
