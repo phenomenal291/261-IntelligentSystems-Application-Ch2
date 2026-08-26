@@ -3,44 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traffic Sign Recognition (KNN)</title>
+    <title>Traffic Sign Recognition (KNN + HOG)</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <!-- Title Header -->
-        <header class="header">
+    <div class="app-container">
+        <!-- Minimal Title -->
+        <header class="app-header">
             <h1>Traffic Sign Recognition</h1>
-            <p>Practical Computer Vision with K-Nearest Neighbors (KNN + HOG Features)</p>
+            <p>Interactive Instance-Based Learning with KNN & HOG Gradient Descriptors</p>
         </header>
 
-        <!-- Main Card -->
-        <main class="card">
-            <!-- Upload Drop Zone -->
-            <div class="drop-zone" id="dropZone">
+        <main class="main-card">
+            <!-- Upload & Paste Zone -->
+            <div class="drop-zone" id="dropZone" tabindex="0">
                 <input type="file" id="fileInput" accept="image/*" class="file-input">
+                
                 <div class="drop-content" id="dropContent">
                     <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="17 8 12 3 7 8"></polyline>
                         <line x1="12" y1="3" x2="12" y2="15"></line>
                     </svg>
-                    <p class="drop-text">Drag & drop traffic sign image here, or <span>browse</span></p>
-                    <span class="drop-hint">Supports PNG, JPG, JPEG</span>
+                    <p class="drop-text">Drag & drop image, <span>browse</span>, or press <strong>Ctrl+V</strong> to paste</p>
+                    <span class="drop-hint">Supports PNG, JPG, JPEG, Screenshots</span>
                 </div>
-                <!-- Image Preview Area -->
+
+                <!-- Preview Area with Scanning Laser Animation -->
                 <div class="preview-wrapper hidden" id="previewWrapper">
-                    <img id="imagePreview" class="preview-img" alt="Traffic Sign Preview">
+                    <div class="scanner-box">
+                        <img id="imagePreview" class="preview-img" alt="Traffic Sign Preview">
+                        <div class="scan-bar hidden" id="scanBar"></div>
+                    </div>
                     <button type="button" class="btn-clear" id="btnClear" title="Clear image">&times;</button>
                 </div>
             </div>
 
-            <!-- Quick Demo Sample Buttons -->
+            <!-- Quick Demo Sample Bar -->
             <div class="samples-bar">
-                <span class="samples-title">Or try a sample sign:</span>
+                <span class="samples-title">Or test a sample sign:</span>
                 <div class="samples-list" id="samplesList">
                     <!-- Populated dynamically via JS -->
                 </div>
@@ -48,38 +52,87 @@
 
             <!-- Classify Action Button -->
             <button id="btnClassify" class="btn-classify" disabled>
-                <span>Run KNN Prediction</span>
+                <span>⚡ Run KNN Recognition Pipeline</span>
             </button>
 
-            <!-- Prediction Result Display Area -->
+            <!-- Educational Pipeline Stepper Animation -->
+            <div class="pipeline-stepper hidden" id="pipelineStepper">
+                <div class="step-item" id="step1">
+                    <div class="step-dot">1</div>
+                    <div class="step-label">Resize 32x32</div>
+                </div>
+                <div class="step-line" id="line1"></div>
+                <div class="step-item" id="step2">
+                    <div class="step-dot">2</div>
+                    <div class="step-label">Extract HOG (1,568 features)</div>
+                </div>
+                <div class="step-line" id="line2"></div>
+                <div class="step-item" id="step3">
+                    <div class="step-dot">3</div>
+                    <div class="step-label">Euclidean Distances</div>
+                </div>
+                <div class="step-line" id="line3"></div>
+                <div class="step-item" id="step4">
+                    <div class="step-dot">4</div>
+                    <div class="step-label">K=3 Voting</div>
+                </div>
+            </div>
+
+            <!-- Prediction Result & Educational Breakdown Area -->
             <div class="result-area" id="resultArea">
                 <div class="result-placeholder" id="resultPlaceholder">
-                    Upload an image or pick a sample to view classification results.
+                    Select or paste an image, then run the pipeline to view feature representations and nearest neighbors.
                 </div>
+
                 <div class="result-card hidden" id="resultCard">
-                    <div class="result-header">
-                        <div class="result-badge">Detected Sign</div>
-                        <div class="result-time" id="resTime">-- ms</div>
+                    <!-- Detected Sign Banner -->
+                    <div class="result-banner">
+                        <div>
+                            <span class="badge-status">Classification Result</span>
+                            <h2 class="result-name" id="resName">--</h2>
+                        </div>
+                        <div class="banner-stats">
+                            <div class="stat-box">
+                                <span class="stat-label">Confidence</span>
+                                <span class="stat-val highlight" id="resConfidence">--%</span>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label">Inference Time</span>
+                                <span class="stat-val" id="resTime">-- ms</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="result-name" id="resName">--</div>
-                    <div class="metrics-row">
-                        <div class="metric">
-                            <span class="metric-label">Confidence</span>
-                            <span class="metric-value" id="resConfidence">--%</span>
+
+                    <!-- Visual HOG Feature Extraction View -->
+                    <div class="edu-section">
+                        <h4 class="edu-title">1. Feature Extraction: Grayscale vs. HOG Gradient Orientation</h4>
+                        <div class="feature-comparison">
+                            <div class="feature-card">
+                                <img id="origThumb" class="feature-thumb" alt="Input Sign">
+                                <span>Input Sample (32x32)</span>
+                            </div>
+                            <div class="feature-arrow">➔</div>
+                            <div class="feature-card">
+                                <img id="hogThumb" class="feature-thumb" alt="HOG Descriptor Map">
+                                <span>HOG Gradient Map (1,568 D)</span>
+                            </div>
                         </div>
-                        <div class="metric">
-                            <span class="metric-label">Nearest Distance</span>
-                            <span class="metric-value" id="resDist">--</span>
-                        </div>
-                        <div class="metric">
-                            <span class="metric-label">Algorithm</span>
-                            <span class="metric-value">HOG + KNN (K=3)</span>
+                    </div>
+
+                    <!-- Top 3 Nearest Neighbors Exemplar Gallery -->
+                    <div class="edu-section">
+                        <h4 class="edu-title">2. K=3 Nearest Neighbors in Euclidean Feature Space</h4>
+                        <div class="neighbors-grid" id="neighborsGrid">
+                            <!-- Populated dynamically via JS -->
                         </div>
                     </div>
                 </div>
             </div>
         </main>
     </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast hidden">Image pasted from clipboard!</div>
 
     <script src="/static/js/script.js"></script>
 </body>
