@@ -1,14 +1,15 @@
 /**
  * Traffic Sign KNN Recognition Client Script
- * Features: Clipboard Paste Support, Custom KNN Hyperparameters (K, Metric, Voting),
- * and Dynamic Nearest Neighbor Exemplar Gallery
+ * Ultra-Fast Asynchronous Inference with Live Parameter Controls
  */
 
 document.addEventListener('DOMContentLoaded', () => {
     let currentImageFile = null;
     let currentImageSrc = null;
+    let isProcessing = false;
+    let debounceTimer = null;
 
-    // Elements
+    // DOM Elements
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
     const dropContent = document.getElementById('dropContent');
@@ -43,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toast.classList.remove('hidden');
         setTimeout(() => {
             toast.classList.add('hidden');
-        }, 2200);
+        }, 1800);
     }
 
     // 1. Fetch & Render Demo Sample Chips
@@ -66,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 2. Select Sample Image (Loads cleanly into preview)
+    // 2. Select Sample Image
     async function selectSample(sample) {
         try {
             const res = await fetch(sample.url);
@@ -74,7 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
             currentImageFile = new File([blob], sample.filename, { type: 'image/png' });
             currentImageSrc = URL.createObjectURL(blob);
             displayPreview(currentImageSrc);
-            showToast(`Loaded sample: ${sample.name}`);
+            showToast(`Loaded: ${sample.name}`);
+            runPrediction();
         } catch (err) {
             console.error('Error selecting sample:', err);
         }
@@ -132,6 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.onload = (e) => {
             currentImageSrc = e.target.result;
             displayPreview(currentImageSrc);
+            runPrediction();
         };
         reader.readAsDataURL(file);
     }
@@ -141,11 +144,6 @@ document.addEventListener('DOMContentLoaded', () => {
         dropContent.classList.add('hidden');
         previewWrapper.classList.remove('hidden');
         btnClassify.disabled = false;
-        btnClassify.innerHTML = '<span>⚡ Run KNN Classification</span>';
-        
-        // Reset results on new image
-        resultCard.classList.add('hidden');
-        resultPlaceholder.classList.remove('hidden');
     }
 
     // 6. Clear Button
@@ -167,32 +165,30 @@ document.addEventListener('DOMContentLoaded', () => {
         resultPlaceholder.classList.remove('hidden');
     }
 
-    // 7. Parameter Listeners
+    // 7. Instant Debounced Parameter Re-Evaluation
+    function triggerDebouncedPrediction() {
+        if (!currentImageFile) return;
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            runPrediction();
+        }, 50);
+    }
+
     kSlider.addEventListener('input', (e) => {
         kBadge.textContent = e.target.value;
-        if (currentImageFile && !resultCard.classList.contains('hidden')) {
-            runPrediction();
-        }
+        triggerDebouncedPrediction();
     });
 
-    metricSelect.addEventListener('change', () => {
-        if (currentImageFile && !resultCard.classList.contains('hidden')) {
-            runPrediction();
-        }
-    });
+    metricSelect.addEventListener('change', triggerDebouncedPrediction);
+    weightsSelect.addEventListener('change', triggerDebouncedPrediction);
 
-    weightsSelect.addEventListener('change', () => {
-        if (currentImageFile && !resultCard.classList.contains('hidden')) {
-            runPrediction();
-        }
-    });
-
-    // 8. Run KNN Prediction with Custom Parameters
+    // 8. Run Instant Classification
     btnClassify.addEventListener('click', runPrediction);
 
     async function runPrediction() {
-        if (!currentImageFile) return;
+        if (!currentImageFile || isProcessing) return;
 
+        isProcessing = true;
         btnClassify.disabled = true;
         btnClassify.textContent = 'Classifying...';
         scanBar.classList.remove('hidden');
@@ -229,10 +225,11 @@ document.addEventListener('DOMContentLoaded', () => {
             scanBar.classList.add('hidden');
             btnClassify.disabled = false;
             btnClassify.innerHTML = '<span>⚡ Run KNN Classification</span>';
+            isProcessing = false;
         }
     }
 
-    // 9. Render Rich Results & Dynamic Top-K Neighbor Gallery
+    // 9. Render Results & Dynamic Top-K Neighbor Gallery
     function renderResults(data) {
         resultPlaceholder.classList.add('hidden');
         resultCard.classList.remove('hidden');
