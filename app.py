@@ -1,6 +1,6 @@
 """
 Traffic Sign Recognition Web Application
-Optimized High-Performance Flask Server
+High-Performance Flask Server with 2D Feature Space Map & Voting Analysis
 """
 
 import os
@@ -14,9 +14,9 @@ from sklearn.metrics.pairwise import pairwise_distances
 import joblib
 
 try:
-    from traffic_sign_knn_app.train import extract_features_from_image
+    from traffic_sign_knn_app.train import extract_features_from_image, CLASS_COLORS
 except ImportError:
-    from train import extract_features_from_image
+    from train import extract_features_from_image, CLASS_COLORS
 
 app = Flask(__name__)
 
@@ -31,11 +31,14 @@ if not os.path.exists(MODEL_PATH):
 model_payload = joblib.load(MODEL_PATH)
 X_train = model_payload["X_train"]
 y_train = model_payload["y_train"]
+pca = model_payload["pca"]
+X_2d = model_payload["X_2d"]
 class_names_map = model_payload["class_names"]
+class_colors_map = model_payload.get("class_colors", CLASS_COLORS)
 classes_list = list(model_payload["classes_"])
 train_image_paths = model_payload.get("train_image_paths", [])
 
-# Pre-cache all training exemplar images into base64 in memory for instantaneous zero-IO lookups
+# Pre-cache all training exemplar images into base64 in memory
 print("Pre-caching training exemplar thumbnails in memory...")
 image_b64_cache = {}
 for rel_p in train_image_paths:
@@ -47,7 +50,6 @@ for rel_p in train_image_paths:
 print(f"Server ready! ({len(X_train)} training vectors, {len(image_b64_cache)} cached thumbnails)")
 
 def render_hog_to_base64_fast(hog_image_arr):
-    """Ultra-fast (sub-millisecond) in-memory HOG map encoding via Pillow"""
     hog_norm = (hog_image_arr / (hog_image_arr.max() + 1e-8) * 255).astype(np.uint8)
     pil_img = Image.fromarray(hog_norm, mode='L').resize((128, 128), Image.Resampling.NEAREST)
     buf = io.BytesIO()
@@ -58,6 +60,26 @@ def render_hog_to_base64_fast(hog_image_arr):
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/api/feature_map", methods=["GET"])
+def get_feature_map():
+    """Returns static 2D coordinates for all 350 training points in PCA space."""
+    points = []
+    for i in range(len(X_2d)):
+        lbl = y_train[i]
+        points.append({
+            "x": round(float(X_2d[i, 0]), 3),
+            "y": round(float(X_2d[i, 1]), 3),
+            "label": lbl,
+            "name": class_names_map.get(lbl, lbl),
+            "color": class_colors_map.get(lbl, "#3B82F6"),
+            "index": i
+        })
+    return jsonify({
+        "points": points,
+        "class_names": class_names_map,
+        "class_colors": class_colors_map
+    })
 
 @app.route("/api/samples", methods=["GET"])
 def get_samples():
@@ -89,7 +111,7 @@ def predict():
     if file.filename == "":
         return jsonify({"success": False, "error": "Empty filename."}), 400
 
-    # Read user-customized KNN parameters
+    # User parameters
     k_val = int(request.form.get("k", 3))
     k_val = max(1, min(k_val, min(15, len(X_train))))
     
@@ -100,40 +122,66 @@ def predict():
     weights = request.form.get("weights", "distance").lower()
 
     try:
-        # 1. Fast Feature Extraction & HOG Map
+        # 1. Feature Extraction & HOG Map
         img = Image.open(io.BytesIO(file.read())).convert("RGB")
         features, hog_img_arr, _ = extract_features_from_image(img, return_hog_image=True)
         feat_vector = features.reshape(1, -1)
 
-        # 2. Vectorized Distance Computation in Feature Space
+        # 2. 2D PCA Projection of Query Point
+        q_2d_arr = pca.transform(feat_vector)[0]
+        q_2d = [round(float(q_2d_arr[0]), 3), round(float(q_2d_arr[1]), 3)]
+
+        # 3. Distance Computation
         dists = pairwise_distances(feat_vector, X_train, metric=metric)[0]
 
-        # 3. Sort & Select Top-K Nearest Neighbors
+        # 4. Top-K Sorting
         sorted_indices = np.argsort(dists)[:k_val]
         top_k_indices = sorted_indices
         top_k_dists = dists[top_k_indices]
         top_k_labels = y_train[top_k_indices]
 
-        # 4. Voting Mechanism (Uniform vs Distance-Weighted)
+        # 5. Dual Voting Breakdown Comparison (Uniform vs Distance)
         eps = 1e-6
-        if weights == "distance":
-            vote_weights = 1.0 / (top_k_dists + eps)
-        else:
-            vote_weights = np.ones(k_val, dtype=float)
+        # A: Uniform votes
+        uniform_scores = {}
+        for lbl in top_k_labels:
+            uniform_scores[lbl] = uniform_scores.get(lbl, 0) + 1
+        
+        uniform_list = []
+        for lbl, cnt in sorted(uniform_scores.items(), key=lambda x: x[1], reverse=True):
+            uniform_list.append({
+                "class_key": lbl,
+                "class_name": class_names_map.get(lbl, lbl),
+                "score": cnt,
+                "percentage": round((cnt / k_val) * 100.0, 1),
+                "color": class_colors_map.get(lbl, "#3B82F6")
+            })
 
-        # Aggregate class vote scores
-        class_scores = {}
-        for lbl, w in zip(top_k_labels, vote_weights):
-            class_scores[lbl] = class_scores.get(lbl, 0.0) + w
+        # B: Distance-weighted votes
+        dist_weights = 1.0 / (top_k_dists + eps)
+        dist_scores = {}
+        for lbl, w in zip(top_k_labels, dist_weights):
+            dist_scores[lbl] = dist_scores.get(lbl, 0.0) + w
+        
+        total_w_sum = np.sum(dist_weights)
+        dist_list = []
+        for lbl, sc in sorted(dist_scores.items(), key=lambda x: x[1], reverse=True):
+            dist_list.append({
+                "class_key": lbl,
+                "class_name": class_names_map.get(lbl, lbl),
+                "score": round(float(sc), 2),
+                "percentage": round((sc / total_w_sum) * 100.0, 1) if total_w_sum > 0 else 100.0,
+                "color": class_colors_map.get(lbl, "#3B82F6")
+            })
 
-        total_weight_sum = np.sum(vote_weights)
-        winning_class_key = max(class_scores, key=class_scores.get)
-        winning_score = class_scores[winning_class_key]
-        confidence = float((winning_score / total_weight_sum) * 100.0) if total_weight_sum > 0 else 100.0
+        # Active Winner
+        active_list = dist_list if weights == "distance" else uniform_list
+        winning_class_key = active_list[0]["class_key"]
+        confidence = active_list[0]["percentage"]
 
-        # 5. Build K Nearest Neighbor Exemplar Cards (Instant in-memory cache)
+        # 6. Build Top-K Neighbor Exemplars
         neighbors_info = []
-        for rank, (idx, d, w) in enumerate(zip(top_k_indices, top_k_dists, vote_weights), start=1):
+        for rank, (idx, d, w) in enumerate(zip(top_k_indices, top_k_dists, dist_weights), start=1):
             n_label = y_train[idx]
             n_name = class_names_map.get(n_label, n_label)
             rel_p = train_image_paths[idx] if idx < len(train_image_paths) else ""
@@ -141,8 +189,12 @@ def predict():
 
             neighbors_info.append({
                 "rank": rank,
+                "index": int(idx),
+                "x2d": round(float(X_2d[idx, 0]), 3),
+                "y2d": round(float(X_2d[idx, 1]), 3),
                 "class_name": n_name,
                 "class_key": n_label,
+                "color": class_colors_map.get(n_label, "#3B82F6"),
                 "distance": round(float(d), 4),
                 "weight": round(float(w), 3) if weights == "distance" else "1.0",
                 "image_b64": n_b64
@@ -155,12 +207,17 @@ def predict():
             "success": True,
             "predicted_class": class_names_map.get(winning_class_key, winning_class_key),
             "class_key": winning_class_key,
-            "confidence": round(confidence, 1),
+            "confidence": confidence,
             "inference_time_ms": round(inference_time_ms, 1),
             "k": k_val,
             "metric": metric,
             "weights": weights,
+            "q_2d": q_2d,
             "hog_image_b64": hog_b64,
+            "voting_comparison": {
+                "uniform": uniform_list,
+                "distance": dist_list
+            },
             "neighbors": neighbors_info
         })
 
@@ -168,5 +225,5 @@ def predict():
         return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
-    print("Starting Optimized Traffic Sign KNN Server on http://127.0.0.1:5000")
+    print("Starting Traffic Sign KNN Server on http://127.0.0.1:5000")
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -1,6 +1,6 @@
 /**
  * Traffic Sign KNN Recognition Client Script
- * Ultra-Fast Asynchronous Inference with Live Parameter Controls
+ * Visualizes 2D PCA Feature Space Map, Dual Voting Comparisons, & Top-K Neighbors
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -8,6 +8,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentImageSrc = null;
     let isProcessing = false;
     let debounceTimer = null;
+
+    // Feature Map Data
+    let mapData = null;
+    let query2D = null;
+    let activeNeighbors = [];
+    let canvasBounds = { xMin: -5, xMax: 5, yMin: -5, yMax: 5 };
 
     // DOM Elements
     const dropZone = document.getElementById('dropZone');
@@ -21,40 +27,43 @@ document.addEventListener('DOMContentLoaded', () => {
     const samplesList = document.getElementById('samplesList');
     const toast = document.getElementById('toast');
 
-    // Hyperparameter controls
+    // Controls
     const kSlider = document.getElementById('kSlider');
     const kBadge = document.getElementById('kBadge');
     const metricSelect = document.getElementById('metricSelect');
     const weightsSelect = document.getElementById('weightsSelect');
 
-    // Result elements
-    const resultPlaceholder = document.getElementById('resultPlaceholder');
-    const resultCard = document.getElementById('resultCard');
+    // Result Elements
     const resName = document.getElementById('resName');
     const resConfidence = document.getElementById('resConfidence');
     const resTime = document.getElementById('resTime');
     const origThumb = document.getElementById('origThumb');
     const hogThumb = document.getElementById('hogThumb');
+    const mapStatusTag = document.getElementById('mapStatusTag');
+    const uniformBars = document.getElementById('uniformBars');
+    const distanceBars = document.getElementById('distanceBars');
     const neighborsTitle = document.getElementById('neighborsTitle');
-    const activeParamsTag = document.getElementById('activeParamsTag');
     const neighborsGrid = document.getElementById('neighborsGrid');
+
+    // Canvas
+    const canvas = document.getElementById('featureMapCanvas');
+    const ctx = canvas.getContext('2d');
+    const tooltip = document.getElementById('canvasTooltip');
 
     function showToast(message) {
         toast.textContent = message;
         toast.classList.remove('hidden');
-        setTimeout(() => {
-            toast.classList.add('hidden');
-        }, 1800);
+        setTimeout(() => toast.classList.add('hidden'), 1800);
     }
 
-    // 1. Fetch & Render Demo Sample Chips
-    async function loadSamples() {
+    // 1. Initialize & Fetch Static Feature Map Data
+    async function init() {
         try {
-            const res = await fetch('/api/samples');
-            const data = await res.json();
+            // Load sample signs
+            const resSamples = await fetch('/api/samples');
+            const dataSamples = await resSamples.json();
             samplesList.innerHTML = '';
-            
-            data.samples.forEach(sample => {
+            dataSamples.samples.forEach(sample => {
                 const chip = document.createElement('button');
                 chip.type = 'button';
                 chip.className = 'sample-chip';
@@ -62,12 +71,173 @@ document.addEventListener('DOMContentLoaded', () => {
                 chip.addEventListener('click', () => selectSample(sample));
                 samplesList.appendChild(chip);
             });
+
+            // Load 2D Feature Map points
+            const resMap = await fetch('/api/feature_map');
+            mapData = await resMap.json();
+            computeCanvasBounds();
+            resizeCanvas();
+            drawFeatureMap();
         } catch (err) {
-            console.error('Error loading samples:', err);
+            console.error('Initialization error:', err);
         }
     }
 
-    // 2. Select Sample Image
+    function computeCanvasBounds() {
+        if (!mapData || !mapData.points.length) return;
+        const xs = mapData.points.map(p => p.x);
+        const ys = mapData.points.map(p => p.y);
+        const padX = (Math.max(...xs) - Math.min(...xs)) * 0.12 || 1;
+        const padY = (Math.max(...ys) - Math.min(...ys)) * 0.12 || 1;
+        canvasBounds = {
+            xMin: Math.min(...xs) - padX,
+            xMax: Math.max(...xs) + padX,
+            yMin: Math.min(...ys) - padY,
+            yMax: Math.max(...ys) + padY
+        };
+    }
+
+    function toCanvasCoords(x, y) {
+        const cw = canvas.width;
+        const ch = canvas.height;
+        const cx = ((x - canvasBounds.xMin) / (canvasBounds.xMax - canvasBounds.xMin)) * cw;
+        const cy = ch - ((y - canvasBounds.yMin) / (canvasBounds.yMax - canvasBounds.yMin)) * ch;
+        return { cx, cy };
+    }
+
+    function resizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio || 560;
+        canvas.height = rect.height * window.devicePixelRatio || 340;
+    }
+    window.addEventListener('resize', () => {
+        resizeCanvas();
+        drawFeatureMap();
+    });
+
+    // 2. Draw 2D Feature Space Map
+    function drawFeatureMap() {
+        if (!mapData || !ctx) return;
+        const cw = canvas.width;
+        const ch = canvas.height;
+        ctx.clearRect(0, 0, cw, ch);
+
+        // Draw subtle grid
+        ctx.strokeStyle = '#1E293B';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < cw; x += 40) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ch); ctx.stroke();
+        }
+        for (let y = 0; y < ch; y += 40) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cw, y); ctx.stroke();
+        }
+
+        // Draw connecting rays & radius circle if Query active
+        if (query2D && activeNeighbors.length > 0) {
+            const qPt = toCanvasCoords(query2D[0], query2D[1]);
+            
+            // Max neighbor distance for radius circle
+            let maxCanvasDist = 0;
+            activeNeighbors.forEach(n => {
+                const nPt = toCanvasCoords(n.x2d, n.y2d);
+                const dPx = Math.hypot(qPt.cx - nPt.cx, qPt.cy - nPt.cy);
+                if (dPx > maxCanvasDist) maxCanvasDist = dPx;
+
+                // Connecting Ray
+                ctx.beginPath();
+                ctx.moveTo(qPt.cx, qPt.cy);
+                ctx.lineTo(nPt.cx, nPt.cy);
+                ctx.strokeStyle = n.color || '#3B82F6';
+                ctx.lineWidth = 1.8;
+                ctx.setLineDash([4, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            });
+
+            // Enclosing Neighborhood Circle
+            if (maxCanvasDist > 0) {
+                ctx.beginPath();
+                ctx.arc(qPt.cx, qPt.cy, maxCanvasDist + 8, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+        }
+
+        // Draw all training cluster points
+        mapData.points.forEach(p => {
+            const pt = toCanvasCoords(p.x, p.y);
+            const isNeighbor = activeNeighbors.some(n => n.index === p.index);
+
+            ctx.beginPath();
+            ctx.arc(pt.cx, pt.cy, isNeighbor ? 5.5 : 3.5, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.fill();
+
+            if (isNeighbor) {
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        });
+
+        // Draw Query Point Star / Badge
+        if (query2D) {
+            const qPt = toCanvasCoords(query2D[0], query2D[1]);
+
+            // Outer glow pulse
+            ctx.beginPath();
+            ctx.arc(qPt.cx, qPt.cy, 12, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(234, 179, 8, 0.25)';
+            ctx.fill();
+
+            // Inner target
+            ctx.beginPath();
+            ctx.arc(qPt.cx, qPt.cy, 7, 0, Math.PI * 2);
+            ctx.fillStyle = '#EAB308';
+            ctx.fill();
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            // Label
+            ctx.fillStyle = '#F8FAFC';
+            ctx.font = 'bold 12px Inter, sans-serif';
+            ctx.fillText('Query (Q)', qPt.cx + 10, qPt.cy - 6);
+        }
+    }
+
+    // 3. Canvas Hover Tooltip
+    canvas.addEventListener('mousemove', (e) => {
+        if (!mapData) return;
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+        let found = null;
+        for (const p of mapData.points) {
+            const pt = toCanvasCoords(p.x, p.y);
+            if (Math.hypot(mouseX - pt.cx, mouseY - pt.cy) < 10) {
+                found = p;
+                break;
+            }
+        }
+
+        if (found) {
+            tooltip.classList.remove('hidden');
+            tooltip.style.left = `${e.clientX - rect.left + 12}px`;
+            tooltip.style.top = `${e.clientY - rect.top + 12}px`;
+            tooltip.textContent = `${found.name} (x: ${found.x}, y: ${found.y})`;
+        } else {
+            tooltip.classList.add('hidden');
+        }
+    });
+
+    canvas.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
+
+    // 4. Sample Selection
     async function selectSample(sample) {
         try {
             const res = await fetch(sample.url);
@@ -82,14 +252,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 3. File Input Change
+    // 5. File Input Change
     fileInput.addEventListener('change', (e) => {
         if (e.target.files && e.target.files[0]) {
             handleFile(e.target.files[0]);
         }
     });
 
-    // 4. Clipboard Paste Support (Ctrl+V / Cmd+V)
+    // 6. Clipboard Paste Support (Ctrl+V / Cmd+V)
     window.addEventListener('paste', (e) => {
         const items = (e.clipboardData || window.clipboardData).items;
         for (let i = 0; i < items.length; i++) {
@@ -103,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 5. Drag & Drop Handlers
+    // 7. Drag & Drop Handlers
     ['dragenter', 'dragover'].forEach(name => {
         dropZone.addEventListener(name, (e) => {
             e.preventDefault();
@@ -146,7 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnClassify.disabled = false;
     }
 
-    // 6. Clear Button
+    // 8. Clear Button
     btnClear.addEventListener('click', (e) => {
         e.stopPropagation();
         clearInput();
@@ -155,17 +325,24 @@ document.addEventListener('DOMContentLoaded', () => {
     function clearInput() {
         currentImageFile = null;
         currentImageSrc = null;
+        query2D = null;
+        activeNeighbors = [];
         fileInput.value = '';
         imagePreview.src = '';
         previewWrapper.classList.add('hidden');
         dropContent.classList.remove('hidden');
         btnClassify.disabled = true;
         scanBar.classList.add('hidden');
-        resultCard.classList.add('hidden');
-        resultPlaceholder.classList.remove('hidden');
+        resName.textContent = 'Ready';
+        resConfidence.textContent = '--%';
+        resTime.textContent = '-- ms';
+        uniformBars.innerHTML = '<span class="text-muted">Run classification to view votes.</span>';
+        distanceBars.innerHTML = '<span class="text-muted">Run classification to view votes.</span>';
+        neighborsGrid.innerHTML = '<div class="text-muted text-center py-2">Select an image to inspect nearest training exemplars.</div>';
+        drawFeatureMap();
     }
 
-    // 7. Instant Debounced Parameter Re-Evaluation
+    // 9. Instant Parameter Re-Evaluation
     function triggerDebouncedPrediction() {
         if (!currentImageFile) return;
         clearTimeout(debounceTimer);
@@ -182,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
     metricSelect.addEventListener('change', triggerDebouncedPrediction);
     weightsSelect.addEventListener('change', triggerDebouncedPrediction);
 
-    // 8. Run Instant Classification
+    // 10. Run Prediction
     btnClassify.addEventListener('click', runPrediction);
 
     async function runPrediction() {
@@ -215,12 +392,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderResults(data);
             } else {
                 alert('Prediction error: ' + data.error);
-                resultPlaceholder.classList.remove('hidden');
             }
         } catch (err) {
             console.error('Inference error:', err);
             alert('Failed to connect to server.');
-            resultPlaceholder.classList.remove('hidden');
         } finally {
             scanBar.classList.add('hidden');
             btnClassify.disabled = false;
@@ -229,29 +404,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 9. Render Results & Dynamic Top-K Neighbor Gallery
+    // 11. Render Results, Feature Map, & Voting Bars
     function renderResults(data) {
-        resultPlaceholder.classList.add('hidden');
-        resultCard.classList.remove('hidden');
-
         // Main stats
         resName.textContent = data.predicted_class;
         resConfidence.textContent = `${data.confidence}%`;
         resTime.textContent = `${data.inference_time_ms} ms`;
 
-        // Active Parameters Tag
+        // Update Map State
+        query2D = data.q_2d;
+        activeNeighbors = data.neighbors;
         const metricName = data.metric.charAt(0).toUpperCase() + data.metric.slice(1);
         const weightName = data.weights === 'distance' ? 'Weighted' : 'Uniform';
-        activeParamsTag.textContent = `K=${data.k} • ${metricName} • ${weightName}`;
-        neighborsTitle.textContent = `Top ${data.k} Nearest Neighbors in Feature Space`;
+        mapStatusTag.textContent = `K=${data.k} • ${metricName} • ${weightName}`;
+        neighborsTitle.textContent = `Top ${data.k} Nearest Neighbors Gallery`;
 
-        // HOG Feature Map Visualizer
+        // Draw Map
+        drawFeatureMap();
+
+        // HOG Thumbnails
         origThumb.src = currentImageSrc;
         if (data.hog_image_b64) {
             hogThumb.src = `data:image/png;base64,${data.hog_image_b64}`;
         }
 
-        // Render Dynamic Neighbors Gallery
+        // Render Voting Comparison Bars
+        renderVotingBars(uniformBars, data.voting_comparison.uniform, false);
+        renderVotingBars(distanceBars, data.voting_comparison.distance, true);
+
+        // Render Neighbors Gallery
         neighborsGrid.innerHTML = '';
         if (data.neighbors && data.neighbors.length > 0) {
             data.neighbors.forEach(n => {
@@ -272,6 +453,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Start
-    loadSamples();
+    function renderVotingBars(container, list, isDistance) {
+        container.innerHTML = '';
+        if (!list || !list.length) {
+            container.innerHTML = '<span class="text-muted">No votes.</span>';
+            return;
+        }
+
+        list.forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'vote-row';
+
+            const scoreLabel = isDistance ? `${item.score} pts (${item.percentage}%)` : `${item.score} votes (${item.percentage}%)`;
+
+            row.innerHTML = `
+                <div class="vote-row-meta">
+                    <span>${item.class_name}</span>
+                    <span>${scoreLabel}</span>
+                </div>
+                <div class="vote-progress-track">
+                    <div class="vote-progress-fill" style="width: ${item.percentage}%; background-color: ${item.color || '#3B82F6'};"></div>
+                </div>
+            `;
+            container.appendChild(row);
+        });
+    }
+
+    init();
 });

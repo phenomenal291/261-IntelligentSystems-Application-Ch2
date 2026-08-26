@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traffic Sign Recognition (KNN + HOG)</title>
+    <title>Traffic Sign Recognition (KNN Feature Map)</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,139 +11,165 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- Header -->
+        <!-- Minimal Title -->
         <header class="app-header">
-            <h1>Traffic Sign Recognition</h1>
-            <p>Practical Computer Vision with K-Nearest Neighbors & HOG Features</p>
+            <h1>Traffic Sign KNN Explorer</h1>
+            <p>Visualizing Feature Space Embeddings & Distance/Voting Comparisons</p>
         </header>
 
-        <main class="main-card">
-            <!-- Upload & Paste Drop Zone -->
-            <div class="drop-zone" id="dropZone" tabindex="0">
-                <input type="file" id="fileInput" accept="image/*" class="file-input">
-                
-                <div class="drop-content" id="dropContent">
-                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="17 8 12 3 7 8"></polyline>
-                        <line x1="12" y1="3" x2="12" y2="15"></line>
-                    </svg>
-                    <p class="drop-text">Drag & drop image, <span>browse</span>, or press <strong>Ctrl+V</strong> to paste</p>
-                    <span class="drop-hint">Supports PNG, JPG, JPEG, Screenshots</span>
-                </div>
-
-                <!-- Preview Area with Scanning Laser Animation -->
-                <div class="preview-wrapper hidden" id="previewWrapper">
-                    <div class="scanner-box">
-                        <img id="imagePreview" class="preview-img" alt="Traffic Sign Preview">
-                        <div class="scan-bar hidden" id="scanBar"></div>
+        <main class="main-layout">
+            <!-- Left Column: Input & Controls -->
+            <section class="left-panel">
+                <!-- Drop / Paste Zone -->
+                <div class="drop-zone" id="dropZone" tabindex="0">
+                    <input type="file" id="fileInput" accept="image/*" class="file-input">
+                    
+                    <div class="drop-content" id="dropContent">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <p class="drop-text">Drop image, <span>browse</span>, or press <strong>Ctrl+V</strong> to paste</p>
                     </div>
-                    <button type="button" class="btn-clear" id="btnClear" title="Clear image">&times;</button>
-                </div>
-            </div>
 
-            <!-- Quick Demo Sample Bar -->
-            <div class="samples-bar">
-                <span class="samples-title">Or test a sample sign:</span>
-                <div class="samples-list" id="samplesList">
-                    <!-- Populated dynamically via JS -->
-                </div>
-            </div>
-
-            <!-- KNN Parameter Controls -->
-            <div class="params-card">
-                <div class="params-header">
-                    <span class="params-title">KNN Parameters</span>
-                </div>
-                <div class="params-grid">
-                    <!-- K Value Slider -->
-                    <div class="param-group">
-                        <div class="param-top">
-                            <label for="kSlider">Neighbors (K):</label>
-                            <span id="kBadge" class="k-badge">3</span>
+                    <!-- Image Preview -->
+                    <div class="preview-wrapper hidden" id="previewWrapper">
+                        <div class="scanner-box">
+                            <img id="imagePreview" class="preview-img" alt="Traffic Sign Preview">
+                            <div class="scan-bar hidden" id="scanBar"></div>
                         </div>
-                        <input type="range" id="kSlider" min="1" max="9" step="1" value="3" class="param-slider">
-                    </div>
-
-                    <!-- Distance Metric -->
-                    <div class="param-group">
-                        <label for="metricSelect">Metric:</label>
-                        <select id="metricSelect" class="param-select">
-                            <option value="euclidean" selected>Euclidean (L2)</option>
-                            <option value="manhattan">Manhattan (L1)</option>
-                            <option value="cosine">Cosine Distance</option>
-                        </select>
-                    </div>
-
-                    <!-- Weighting Scheme -->
-                    <div class="param-group">
-                        <label for="weightsSelect">Voting:</label>
-                        <select id="weightsSelect" class="param-select">
-                            <option value="distance" selected>Distance (1/d)</option>
-                            <option value="uniform">Uniform Majority</option>
-                        </select>
+                        <button type="button" class="btn-clear" id="btnClear" title="Clear image">&times;</button>
                     </div>
                 </div>
-            </div>
 
-            <!-- Classify Action Button -->
-            <button id="btnClassify" class="btn-classify" disabled>
-                <span>⚡ Run KNN Classification</span>
-            </button>
-
-            <!-- Prediction Result & Educational Breakdown Area -->
-            <div class="result-area" id="resultArea">
-                <div class="result-placeholder" id="resultPlaceholder">
-                    Select, upload, or paste an image and click <strong>Run KNN Classification</strong>.
+                <!-- Sample Chips -->
+                <div class="samples-bar">
+                    <span class="samples-title">Quick Samples:</span>
+                    <div class="samples-list" id="samplesList">
+                        <!-- Populated via JS -->
+                    </div>
                 </div>
 
-                <div class="result-card hidden" id="resultCard">
-                    <!-- Detected Sign Banner -->
-                    <div class="result-banner">
-                        <div>
-                            <span class="badge-status">Detected Traffic Sign</span>
-                            <h2 class="result-name" id="resName">--</h2>
-                        </div>
-                        <div class="banner-stats">
-                            <div class="stat-box">
-                                <span class="stat-label">Confidence</span>
-                                <span class="stat-val highlight" id="resConfidence">--%</span>
+                <!-- KNN Hyperparameter Controls -->
+                <div class="params-card">
+                    <div class="params-header">
+                        <span class="params-title">KNN Parameters</span>
+                    </div>
+                    <div class="params-grid">
+                        <div class="param-group">
+                            <div class="param-top">
+                                <label for="kSlider">Neighbors (K):</label>
+                                <span id="kBadge" class="k-badge">3</span>
                             </div>
-                            <div class="stat-box">
-                                <span class="stat-label">Latency</span>
-                                <span class="stat-val" id="resTime">-- ms</span>
-                            </div>
+                            <input type="range" id="kSlider" min="1" max="9" step="1" value="3" class="param-slider">
                         </div>
-                    </div>
 
-                    <!-- Visual HOG Feature Extraction View -->
-                    <div class="edu-section">
-                        <h4 class="edu-title">Feature Extraction: Grayscale Image ➔ HOG Gradient Descriptor</h4>
-                        <div class="feature-comparison">
-                            <div class="feature-card">
-                                <img id="origThumb" class="feature-thumb" alt="Input Sign">
-                                <span>Input (32x32)</span>
-                            </div>
-                            <div class="feature-arrow">➔</div>
-                            <div class="feature-card">
-                                <img id="hogThumb" class="feature-thumb" alt="HOG Descriptor Map">
-                                <span>HOG Vectors (1,568 D)</span>
-                            </div>
+                        <div class="param-group">
+                            <label for="metricSelect">Distance Metric:</label>
+                            <select id="metricSelect" class="param-select">
+                                <option value="euclidean" selected>Euclidean (L2)</option>
+                                <option value="manhattan">Manhattan (L1)</option>
+                                <option value="cosine">Cosine Distance</option>
+                            </select>
                         </div>
-                    </div>
 
-                    <!-- Top K Nearest Neighbors Exemplar Gallery -->
-                    <div class="edu-section">
-                        <div class="edu-header-row">
-                            <h4 class="edu-title" id="neighborsTitle">Top K Nearest Neighbors in Feature Space</h4>
-                            <span class="metric-tag" id="activeParamsTag">K=3 • Euclidean</span>
-                        </div>
-                        <div class="neighbors-grid" id="neighborsGrid">
-                            <!-- Populated dynamically via JS -->
+                        <div class="param-group">
+                            <label for="weightsSelect">Voting Scheme:</label>
+                            <select id="weightsSelect" class="param-select">
+                                <option value="distance" selected>Distance (1/d)</option>
+                                <option value="uniform">Uniform Majority</option>
+                            </select>
                         </div>
                     </div>
                 </div>
-            </div>
+
+                <!-- Run Button -->
+                <button id="btnClassify" class="btn-classify" disabled>
+                    <span>⚡ Run KNN Classification</span>
+                </button>
+
+                <!-- Feature Extraction Card -->
+                <div class="edu-card">
+                    <h4 class="edu-title">HOG Gradient Orientation</h4>
+                    <div class="feature-comparison">
+                        <div class="feature-card">
+                            <img id="origThumb" class="feature-thumb" alt="Input Sign">
+                            <span>Input (32x32)</span>
+                        </div>
+                        <div class="feature-arrow">➔</div>
+                        <div class="feature-card">
+                            <img id="hogThumb" class="feature-thumb" alt="HOG Map">
+                            <span>HOG Vectors (1,568 D)</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Column: Visual Feature Map & Comparisons -->
+            <section class="right-panel">
+                <!-- Result Banner -->
+                <div class="result-banner" id="resultBanner">
+                    <div>
+                        <span class="badge-status">Classification Result</span>
+                        <h2 class="result-name" id="resName">Ready</h2>
+                    </div>
+                    <div class="banner-stats">
+                        <div class="stat-box">
+                            <span class="stat-label">Confidence</span>
+                            <span class="stat-val highlight" id="resConfidence">--%</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Latency</span>
+                            <span class="stat-val" id="resTime">-- ms</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2D Feature Space Map Canvas -->
+                <div class="map-card">
+                    <div class="map-header">
+                        <div class="map-title-row">
+                            <span class="edu-title">2D PCA Feature Space & Neighborhood Map</span>
+                            <span class="metric-tag" id="mapStatusTag">K=3 • Euclidean</span>
+                        </div>
+                        <p class="map-sub">Points represent 350 training images in HOG feature space. Rays connect Query point (⭐) to its K nearest neighbors.</p>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <canvas id="featureMapCanvas" width="560" height="340"></canvas>
+                        <div id="canvasTooltip" class="canvas-tooltip hidden"></div>
+                    </div>
+                </div>
+
+                <!-- Voting Scheme Comparison Bars -->
+                <div class="edu-card">
+                    <h4 class="edu-title">Voting Comparison: Uniform Majority vs. Distance-Weighted</h4>
+                    <div class="voting-comparison-grid">
+                        <div class="voting-col">
+                            <span class="vote-scheme-title">Uniform Voting (Count)</span>
+                            <div class="vote-bars" id="uniformBars">
+                                <span class="text-muted">Run classification to view votes.</span>
+                            </div>
+                        </div>
+                        <div class="voting-col">
+                            <span class="vote-scheme-title">Distance-Weighted Voting (1/d)</span>
+                            <div class="vote-bars" id="distanceBars">
+                                <span class="text-muted">Run classification to view votes.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top-K Nearest Neighbors Gallery -->
+                <div class="edu-card">
+                    <div class="edu-header-row">
+                        <h4 class="edu-title" id="neighborsTitle">Top K Nearest Neighbors Gallery</h4>
+                    </div>
+                    <div class="neighbors-grid" id="neighborsGrid">
+                        <div class="text-muted text-center py-2">Select an image to inspect nearest training exemplars.</div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
