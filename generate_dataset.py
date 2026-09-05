@@ -1,7 +1,7 @@
 """
 Traffic Sign Dataset Generator
 Generates clean and augmented synthetic traffic sign images for KNN training and testing.
-Uses high-quality scalable vector-style fonts and robust augmentations.
+Uses high-quality scalable vector-style fonts, multi-background variations, and robust augmentations.
 """
 
 import os
@@ -23,18 +23,28 @@ CLASSES = {
     "pedestrian": {"name": "Pedestrian Crossing", "color": "#8B5CF6"}
 }
 
-# Locate system bold fonts
+# Locate system fonts
 FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     "/usr/share/fonts/truetype/crosextra/Carlito-Bold.ttf",
-    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"
+    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
 ]
 VALID_FONTS = [f for f in FONT_CANDIDATES if os.path.exists(f)]
 if not VALID_FONTS:
-    # Fallback to any system TTF font
     all_ttfs = glob.glob("/usr/share/fonts/**/*.ttf", recursive=True)
-    VALID_FONTS = all_ttfs[:3] if all_ttfs else [None]
+    VALID_FONTS = all_ttfs[:5] if all_ttfs else [None]
+
+BACKGROUND_COLORS = [
+    (240, 240, 240),  # Neutral light grey
+    (225, 230, 235),  # Sky grey
+    (210, 215, 210),  # Muted greenery tint
+    (190, 195, 200),  # Overcast cement
+    (230, 225, 220),  # Warm asphalt dust
+    (245, 245, 248),  # Clean studio white
+]
 
 def draw_base_sign(cls_key, size=64, font_path=None, bg_color=(240, 240, 240)):
     if font_path is None and VALID_FONTS and VALID_FONTS[0]:
@@ -132,30 +142,45 @@ def draw_base_sign(cls_key, size=64, font_path=None, bg_color=(240, 240, 240)):
 def augment_image(base_img):
     img = base_img.copy()
 
-    # 1. Random rotation (-12 to 12 deg)
-    angle = random.uniform(-12, 12)
-    bg_color = (random.randint(225, 245), random.randint(225, 245), random.randint(225, 245))
+    # 1. Random rotation (-14 to 14 deg)
+    angle = random.uniform(-14, 14)
+    bg_color = random.choice(BACKGROUND_COLORS)
     img = img.rotate(angle, resample=Image.BILINEAR, fillcolor=bg_color)
 
-    # 2. Random Brightness & Contrast
+    # 2. Random Scale / Resizing jitter (0.88x to 1.12x)
+    if random.random() > 0.4:
+        w, h = img.size
+        scale = random.uniform(0.88, 1.12)
+        new_w, new_h = max(32, int(w * scale)), max(32, int(h * scale))
+        img_scaled = img.resize((new_w, new_h), Image.Resampling.BILINEAR)
+        canvas = Image.new("RGB", (w, h), color=bg_color)
+        off_x = (w - new_w) // 2
+        off_y = (h - new_h) // 2
+        if off_x >= 0 and off_y >= 0:
+            canvas.paste(img_scaled, (off_x, off_y))
+        else:
+            canvas = img_scaled.crop((-off_x, -off_y, -off_x + w, -off_y + h))
+        img = canvas
+
+    # 3. Random Brightness & Contrast
     enhancer = ImageEnhance.Brightness(img)
-    img = enhancer.enhance(random.uniform(0.8, 1.2))
+    img = enhancer.enhance(random.uniform(0.75, 1.25))
 
     enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(random.uniform(0.85, 1.2))
+    img = enhancer.enhance(random.uniform(0.8, 1.25))
 
-    # 3. Random subtle blur
-    if random.random() > 0.4:
-        img = img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.2, 0.5)))
+    # 4. Random subtle blur
+    if random.random() > 0.35:
+        img = img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.2, 0.6)))
 
-    # 4. Subtle sensor noise
+    # 5. Subtle sensor Gaussian noise
     arr = np.array(img, dtype=float)
-    noise = np.random.normal(0, 2.5, arr.shape)
+    noise = np.random.normal(0, random.uniform(1.5, 4.0), arr.shape)
     arr = np.clip(arr + noise, 0, 255).astype(np.uint8)
 
     return Image.fromarray(arr)
 
-def generate_full_dataset(train_samples_per_class=40):
+def generate_full_dataset(train_samples_per_class=80):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     train_dir = os.path.join(base_dir, "data", "train")
     test_dir = os.path.join(base_dir, "data", "test_samples")
@@ -163,7 +188,7 @@ def generate_full_dataset(train_samples_per_class=40):
     os.makedirs(train_dir, exist_ok=True)
     os.makedirs(test_dir, exist_ok=True)
 
-    print("Generating Traffic Sign Dataset with clear typography and multi-font diversity...")
+    print(f"Generating expanded Traffic Sign Dataset ({train_samples_per_class} samples/class)...")
     for cls_key in CLASSES:
         cls_folder = os.path.join(train_dir, cls_key)
         os.makedirs(cls_folder, exist_ok=True)
@@ -176,12 +201,13 @@ def generate_full_dataset(train_samples_per_class=40):
         # 2. Augmented training set
         for i in range(train_samples_per_class):
             chosen_font = random.choice(VALID_FONTS) if VALID_FONTS else None
-            base = draw_base_sign(cls_key, size=64, font_path=chosen_font)
+            chosen_bg = random.choice(BACKGROUND_COLORS)
+            base = draw_base_sign(cls_key, size=64, font_path=chosen_font, bg_color=chosen_bg)
             aug = augment_image(base)
             aug.save(os.path.join(cls_folder, f"{cls_key}_{i:03d}.png"))
 
     total_train = len(CLASSES) * train_samples_per_class
-    print(f"Dataset generated successfully! ({total_train} training images in data/train/, {len(CLASSES)} test samples in data/test_samples/)")
+    print(f"Dataset generated successfully! ({total_train} training images across {len(CLASSES)} classes in data/train/)")
 
 if __name__ == "__main__":
-    generate_full_dataset()
+    generate_full_dataset(train_samples_per_class=80)
