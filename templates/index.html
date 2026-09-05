@@ -99,18 +99,19 @@
 
                 <!-- Feature Extraction Card -->
                 <div class="edu-card">
-                    <h4 class="edu-title">HOG Gradient Orientation</h4>
-                    <div class="feature-comparison">
+                    <h4 class="edu-title">Feature Representation</h4>
+                    <div class="feature-comparison hidden" id="featureCompWrapper">
                         <div class="feature-card">
                             <img id="origThumb" class="feature-thumb" alt="Input Sign">
-                            <span>Input (32x32)</span>
+                            <span>Input (64x64)</span>
                         </div>
                         <div class="feature-arrow">➔</div>
                         <div class="feature-card">
                             <img id="hogThumb" class="feature-thumb" alt="HOG Map">
-                            <span>HOG Vectors (1,568 D)</span>
+                            <span>HOG Gradients</span>
                         </div>
                     </div>
+                    <div id="featureCompPlaceholder" class="text-muted text-center py-2">Select or upload an image to view HOG gradient features.</div>
                 </div>
             </section>
 
@@ -141,7 +142,7 @@
                             <span class="edu-title">2D PCA Feature Space & Neighborhood Map</span>
                             <span class="metric-tag" id="mapStatusTag">K=3 • Euclidean</span>
                         </div>
-                        <p class="map-sub">Points represent 350 training images in HOG feature space. Rays connect Query point (⭐) to its K nearest neighbors.</p>
+                        <p class="map-sub">Points represent 1,200 training vectors in PCA feature space. Rays connect Query point (⭐) to its K nearest neighbors.</p>
                     </div>
                     <div class="canvas-wrapper">
                         <canvas id="featureMapCanvas" width="560" height="340"></canvas>

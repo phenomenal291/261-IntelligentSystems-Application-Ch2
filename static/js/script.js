@@ -39,6 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const resTime = document.getElementById('resTime');
     const origThumb = document.getElementById('origThumb');
     const hogThumb = document.getElementById('hogThumb');
+    const featureCompWrapper = document.getElementById('featureCompWrapper');
+    const featureCompPlaceholder = document.getElementById('featureCompPlaceholder');
     const mapStatusTag = document.getElementById('mapStatusTag');
     const uniformBars = document.getElementById('uniformBars');
     const distanceBars = document.getElementById('distanceBars');
@@ -339,6 +341,8 @@ document.addEventListener('DOMContentLoaded', () => {
         uniformBars.innerHTML = '<span class="text-muted">Run classification to view votes.</span>';
         distanceBars.innerHTML = '<span class="text-muted">Run classification to view votes.</span>';
         neighborsGrid.innerHTML = '<div class="text-muted text-center py-2">Select an image to inspect nearest training exemplars.</div>';
+        if (featureCompWrapper) featureCompWrapper.classList.add('hidden');
+        if (featureCompPlaceholder) featureCompPlaceholder.classList.remove('hidden');
         drawFeatureMap();
     }
 
@@ -449,6 +453,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.hog_image_b64) {
             hogThumb.src = `data:image/png;base64,${data.hog_image_b64}`;
         }
+        if (featureCompWrapper) featureCompWrapper.classList.remove('hidden');
+        if (featureCompPlaceholder) featureCompPlaceholder.classList.add('hidden');
 
         // Render Voting Comparison Bars
         renderVotingBars(uniformBars, data.voting_comparison.uniform, false);
