@@ -1,7 +1,7 @@
 """
 Traffic Sign Dataset Generator
 Generates clean and augmented synthetic traffic sign images for KNN training and testing.
-Uses high-quality scalable vector-style fonts, multi-background variations, and robust augmentations.
+Includes 15 distinct international / GTSRB traffic sign categories with multi-font and background augmentations.
 """
 
 import os
@@ -15,11 +15,16 @@ CLASSES = {
     "speed_30": {"name": "Speed Limit (30 km/h)", "color": "#F97316"},
     "speed_50": {"name": "Speed Limit (50 km/h)", "color": "#F59E0B"},
     "speed_80": {"name": "Speed Limit (80 km/h)", "color": "#EAB308"},
+    "speed_100": {"name": "Speed Limit (100 km/h)", "color": "#D97706"},
     "yield": {"name": "Yield / Give Way", "color": "#84CC16"},
     "no_entry": {"name": "No Entry", "color": "#EF4444"},
+    "no_overtaking": {"name": "No Overtaking", "color": "#B91C1C"},
     "turn_right": {"name": "Turn Right Ahead", "color": "#3B82F6"},
     "turn_left": {"name": "Turn Left Ahead", "color": "#06B6D4"},
     "ahead_only": {"name": "Ahead Only", "color": "#6366F1"},
+    "roundabout": {"name": "Roundabout Mandatory", "color": "#2563EB"},
+    "traffic_signals": {"name": "Traffic Light Ahead", "color": "#10B981"},
+    "road_work": {"name": "Road Work Ahead", "color": "#EA580C"},
     "pedestrian": {"name": "Pedestrian Crossing", "color": "#8B5CF6"}
 }
 
@@ -56,6 +61,7 @@ def draw_base_sign(cls_key, size=64, font_path=None, bg_color=(240, 240, 240)):
     img = Image.new("RGB", (size, size), color=bg_color)
     draw = ImageDraw.Draw(img)
     
+    # 1. Stop
     if cls_key == "stop":
         w = size - 2 * pad
         c = w / 3.0
@@ -72,6 +78,7 @@ def draw_base_sign(cls_key, size=64, font_path=None, bg_color=(240, 240, 240)):
         else:
             draw.text((size // 2, size // 2), "STOP", fill="#FFFFFF", anchor="mm")
 
+    # 2. Speed Limits (30, 50, 80)
     elif cls_key in ["speed_30", "speed_50", "speed_80"]:
         border_w = max(4, int(size * 0.11))
         draw.ellipse([pad, pad, size - pad, size - pad], fill="#FFFFFF", outline="#DC2626", width=border_w)
@@ -82,6 +89,17 @@ def draw_base_sign(cls_key, size=64, font_path=None, bg_color=(240, 240, 240)):
         else:
             draw.text((size // 2, size // 2), num_str, fill="#000000", anchor="mm")
 
+    # 3. Speed Limit 100
+    elif cls_key == "speed_100":
+        border_w = max(4, int(size * 0.11))
+        draw.ellipse([pad, pad, size - pad, size - pad], fill="#FFFFFF", outline="#DC2626", width=border_w)
+        if font_path:
+            f = ImageFont.truetype(font_path, int(size * 0.31))
+            draw.text((size // 2, size // 2 - int(size * 0.02)), "100", fill="#000000", font=f, anchor="mm")
+        else:
+            draw.text((size // 2, size // 2), "100", fill="#000000", anchor="mm")
+
+    # 4. Yield
     elif cls_key == "yield":
         points = [(pad, pad), (size - pad, pad), (size // 2, size - pad)]
         border_w = max(4, int(size * 0.12))
@@ -92,11 +110,24 @@ def draw_base_sign(cls_key, size=64, font_path=None, bg_color=(240, 240, 240)):
         else:
             draw.text((size // 2, int(size * 0.38)), "YIELD", fill="#DC2626", anchor="mm")
 
+    # 5. No Entry
     elif cls_key == "no_entry":
         draw.ellipse([pad, pad, size - pad, size - pad], fill="#DC2626", outline="#FFFFFF", width=max(2, int(size * 0.03)))
         bar_h = max(4, int(size * 0.18))
         draw.rectangle([pad + int(size * 0.12), size // 2 - bar_h // 2, size - pad - int(size * 0.12), size // 2 + bar_h // 2], fill="#FFFFFF")
 
+    # 6. No Overtaking
+    elif cls_key == "no_overtaking":
+        draw.ellipse([pad, pad, size - pad, size - pad], fill="#FFFFFF", outline="#DC2626", width=max(4, int(size * 0.11)))
+        cy = size // 2
+        # Left black car
+        draw.rounded_rectangle([int(size*0.23), cy - int(size*0.08), int(size*0.45), cy + int(size*0.12)], radius=2, fill="#000000")
+        draw.ellipse([int(size*0.27), cy - int(size*0.14), int(size*0.41), cy - int(size*0.06)], fill="#000000")
+        # Right red car
+        draw.rounded_rectangle([int(size*0.55), cy - int(size*0.08), int(size*0.77), cy + int(size*0.12)], radius=2, fill="#DC2626")
+        draw.ellipse([int(size*0.59), cy - int(size*0.14), int(size*0.73), cy - int(size*0.06)], fill="#DC2626")
+
+    # 7. Turn Right
     elif cls_key == "turn_right":
         draw.ellipse([pad, pad, size - pad, size - pad], fill="#2563EB", outline="#FFFFFF", width=max(2, int(size * 0.04)))
         cx, cy = size // 2, size // 2
@@ -108,6 +139,7 @@ def draw_base_sign(cls_key, size=64, font_path=None, bg_color=(240, 240, 240)):
         ]
         draw.polygon(arrow_head, fill="#FFFFFF")
 
+    # 8. Turn Left
     elif cls_key == "turn_left":
         draw.ellipse([pad, pad, size - pad, size - pad], fill="#2563EB", outline="#FFFFFF", width=max(2, int(size * 0.04)))
         cx, cy = size // 2, size // 2
@@ -119,6 +151,7 @@ def draw_base_sign(cls_key, size=64, font_path=None, bg_color=(240, 240, 240)):
         ]
         draw.polygon(arrow_head, fill="#FFFFFF")
 
+    # 9. Ahead Only
     elif cls_key == "ahead_only":
         draw.ellipse([pad, pad, size - pad, size - pad], fill="#2563EB", outline="#FFFFFF", width=max(2, int(size * 0.04)))
         cx, cy = size // 2, size // 2
@@ -130,6 +163,38 @@ def draw_base_sign(cls_key, size=64, font_path=None, bg_color=(240, 240, 240)):
         ]
         draw.polygon(arrow_head, fill="#FFFFFF")
 
+    # 10. Roundabout
+    elif cls_key == "roundabout":
+        draw.ellipse([pad, pad, size - pad, size - pad], fill="#2563EB", outline="#FFFFFF", width=max(2, int(size * 0.04)))
+        draw.arc([int(size*0.25), int(size*0.25), int(size*0.75), int(size*0.75)], start=30, end=330, fill="#FFFFFF", width=max(2, int(size*0.07)))
+        draw.polygon([(int(size*0.5), int(size*0.25)-int(size*0.06)), (int(size*0.5)+int(size*0.08), int(size*0.25)), (int(size*0.5), int(size*0.25)+int(size*0.06))], fill="#FFFFFF")
+
+    # 11. Traffic Signals Ahead
+    elif cls_key == "traffic_signals":
+        pts = [(pad, pad), (size - pad, pad), (size // 2, size - pad)]
+        draw.polygon(pts, fill="#FFFFFF", outline="#DC2626", width=max(3, int(size * 0.11)))
+        cx = size // 2
+        box_w, box_h = int(size * 0.16), int(size * 0.40)
+        top_y = int(size * 0.20)
+        draw.rectangle([cx - box_w//2, top_y, cx + box_w//2, top_y + box_h], fill="#1E293B")
+        r_light = int(size * 0.04)
+        draw.ellipse([cx - r_light, top_y + int(box_h*0.2) - r_light, cx + r_light, top_y + int(box_h*0.2) + r_light], fill="#EF4444")
+        draw.ellipse([cx - r_light, top_y + int(box_h*0.5) - r_light, cx + r_light, top_y + int(box_h*0.5) + r_light], fill="#F59E0B")
+        draw.ellipse([cx - r_light, top_y + int(box_h*0.8) - r_light, cx + r_light, top_y + int(box_h*0.8) + r_light], fill="#10B981")
+
+    # 12. Road Work Ahead
+    elif cls_key == "road_work":
+        pts = [(pad, pad), (size - pad, pad), (size // 2, size - pad)]
+        draw.polygon(pts, fill="#FFFFFF", outline="#DC2626", width=max(3, int(size * 0.11)))
+        cx = size // 2
+        draw.ellipse([cx - int(size*0.05), int(size*0.22), cx + int(size*0.05), int(size*0.32)], fill="#000000")
+        draw.line([(cx, int(size*0.33)), (cx - int(size*0.08), int(size*0.52))], fill="#000000", width=max(2, int(size*0.06)))
+        draw.line([(cx - int(size*0.08), int(size*0.52)), (cx - int(size*0.14), int(size*0.68))], fill="#000000", width=max(2, int(size*0.05)))
+        draw.line([(cx - int(size*0.08), int(size*0.52)), (cx + int(size*0.04), int(size*0.68))], fill="#000000", width=max(2, int(size*0.05)))
+        draw.line([(cx - int(size*0.02), int(size*0.42)), (cx + int(size*0.16), int(size*0.65))], fill="#000000", width=max(2, int(size*0.04)))
+        draw.polygon([(cx + int(size*0.14), int(size*0.63)), (cx + int(size*0.22), int(size*0.68)), (cx + int(size*0.16), int(size*0.72))], fill="#000000")
+
+    # 13. Pedestrian Crossing
     elif cls_key == "pedestrian":
         draw.rectangle([pad, pad, size - pad, size - pad], fill="#2563EB", outline="#FFFFFF", width=max(2, int(size * 0.04)))
         cx = size // 2
@@ -187,7 +252,7 @@ def augment_image(base_img):
 
     return Image.fromarray(arr)
 
-def generate_full_dataset(train_samples_per_class=120):
+def generate_full_dataset(train_samples_per_class=90):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     train_dir = os.path.join(base_dir, "data", "train")
     test_dir = os.path.join(base_dir, "data", "test_samples")
@@ -195,7 +260,7 @@ def generate_full_dataset(train_samples_per_class=120):
     os.makedirs(train_dir, exist_ok=True)
     os.makedirs(test_dir, exist_ok=True)
 
-    print(f"Generating expanded Traffic Sign Dataset ({train_samples_per_class} samples/class)...")
+    print(f"Generating expanded Traffic Sign Dataset ({len(CLASSES)} classes, {train_samples_per_class} samples/class)...")
     for cls_key in CLASSES:
         cls_folder = os.path.join(train_dir, cls_key)
         os.makedirs(cls_folder, exist_ok=True)
@@ -217,4 +282,4 @@ def generate_full_dataset(train_samples_per_class=120):
     print(f"Dataset generated successfully! ({total_train} training images across {len(CLASSES)} classes in data/train/)")
 
 if __name__ == "__main__":
-    generate_full_dataset(train_samples_per_class=120)
+    generate_full_dataset(train_samples_per_class=90)

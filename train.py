@@ -20,25 +20,35 @@ CLASS_NAMES = {
     "speed_30": "Speed Limit (30 km/h)",
     "speed_50": "Speed Limit (50 km/h)",
     "speed_80": "Speed Limit (80 km/h)",
+    "speed_100": "Speed Limit (100 km/h)",
     "yield": "Yield / Give Way",
     "no_entry": "No Entry",
+    "no_overtaking": "No Overtaking",
     "turn_right": "Turn Right Ahead",
     "turn_left": "Turn Left Ahead",
     "ahead_only": "Ahead Only",
+    "roundabout": "Roundabout Mandatory",
+    "traffic_signals": "Traffic Light Ahead",
+    "road_work": "Road Work Ahead",
     "pedestrian": "Pedestrian Crossing"
 }
 
 CLASS_COLORS = {
-    "stop": "#DC2626",        # Red
-    "speed_30": "#F97316",     # Orange
-    "speed_50": "#F59E0B",     # Amber
-    "speed_80": "#EAB308",     # Yellow
-    "yield": "#84CC16",        # Lime
-    "no_entry": "#EF4444",     # Crimson
-    "turn_right": "#3B82F6",   # Blue
-    "turn_left": "#06B6D4",    # Cyan
-    "ahead_only": "#6366F1",   # Indigo
-    "pedestrian": "#8B5CF6"    # Violet
+    "stop": "#DC2626",            # Red
+    "speed_30": "#F97316",         # Orange
+    "speed_50": "#F59E0B",         # Amber
+    "speed_80": "#EAB308",         # Yellow
+    "speed_100": "#D97706",        # Ochre
+    "yield": "#84CC16",            # Lime
+    "no_entry": "#EF4444",         # Crimson
+    "no_overtaking": "#B91C1C",    # Dark Red
+    "turn_right": "#3B82F6",       # Blue
+    "turn_left": "#06B6D4",        # Cyan
+    "ahead_only": "#6366F1",       # Indigo
+    "roundabout": "#2563EB",       # Royal Blue
+    "traffic_signals": "#10B981",  # Emerald
+    "road_work": "#EA580C",        # Burnt Orange
+    "pedestrian": "#8B5CF6"        # Violet
 }
 
 def extract_features_from_image(img_input, return_hog_image=False):

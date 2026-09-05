@@ -96,6 +96,10 @@ def get_samples():
                 })
     return jsonify({"samples": samples})
 
+@app.route("/static/<path:filename>")
+def serve_static(filename):
+    return send_from_directory(os.path.join(BASE_DIR, "static"), filename)
+
 @app.route("/sample_image/<filename>")
 def serve_sample(filename):
     return send_from_directory(SAMPLES_DIR, filename)
