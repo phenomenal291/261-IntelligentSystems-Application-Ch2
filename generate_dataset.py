@@ -44,6 +44,8 @@ BACKGROUND_COLORS = [
     (190, 195, 200),  # Overcast cement
     (230, 225, 220),  # Warm asphalt dust
     (245, 245, 248),  # Clean studio white
+    (200, 205, 210),  # Urban concrete
+    (215, 220, 215)   # Natural roadside
 ]
 
 def draw_base_sign(cls_key, size=64, font_path=None, bg_color=(240, 240, 240)):
@@ -142,15 +144,15 @@ def draw_base_sign(cls_key, size=64, font_path=None, bg_color=(240, 240, 240)):
 def augment_image(base_img):
     img = base_img.copy()
 
-    # 1. Random rotation (-14 to 14 deg)
-    angle = random.uniform(-14, 14)
+    # 1. Random rotation (-15 to 15 deg)
+    angle = random.uniform(-15, 15)
     bg_color = random.choice(BACKGROUND_COLORS)
     img = img.rotate(angle, resample=Image.BILINEAR, fillcolor=bg_color)
 
-    # 2. Random Scale / Resizing jitter (0.88x to 1.12x)
-    if random.random() > 0.4:
+    # 2. Random Scale / Resizing jitter (0.85x to 1.15x)
+    if random.random() > 0.35:
         w, h = img.size
-        scale = random.uniform(0.88, 1.12)
+        scale = random.uniform(0.85, 1.15)
         new_w, new_h = max(32, int(w * scale)), max(32, int(h * scale))
         img_scaled = img.resize((new_w, new_h), Image.Resampling.BILINEAR)
         canvas = Image.new("RGB", (w, h), color=bg_color)
@@ -164,23 +166,28 @@ def augment_image(base_img):
 
     # 3. Random Brightness & Contrast
     enhancer = ImageEnhance.Brightness(img)
-    img = enhancer.enhance(random.uniform(0.75, 1.25))
+    img = enhancer.enhance(random.uniform(0.72, 1.28))
 
     enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(random.uniform(0.8, 1.25))
+    img = enhancer.enhance(random.uniform(0.78, 1.28))
 
-    # 4. Random subtle blur
+    # 4. Color temperature / saturation shift
+    if random.random() > 0.4:
+        enhancer = ImageEnhance.Color(img)
+        img = enhancer.enhance(random.uniform(0.8, 1.2))
+
+    # 5. Random subtle blur
     if random.random() > 0.35:
         img = img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.2, 0.6)))
 
-    # 5. Subtle sensor Gaussian noise
+    # 6. Subtle sensor Gaussian noise
     arr = np.array(img, dtype=float)
     noise = np.random.normal(0, random.uniform(1.5, 4.0), arr.shape)
     arr = np.clip(arr + noise, 0, 255).astype(np.uint8)
 
     return Image.fromarray(arr)
 
-def generate_full_dataset(train_samples_per_class=80):
+def generate_full_dataset(train_samples_per_class=120):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     train_dir = os.path.join(base_dir, "data", "train")
     test_dir = os.path.join(base_dir, "data", "test_samples")
@@ -210,4 +217,4 @@ def generate_full_dataset(train_samples_per_class=80):
     print(f"Dataset generated successfully! ({total_train} training images across {len(CLASSES)} classes in data/train/)")
 
 if __name__ == "__main__":
-    generate_full_dataset(train_samples_per_class=80)
+    generate_full_dataset(train_samples_per_class=120)

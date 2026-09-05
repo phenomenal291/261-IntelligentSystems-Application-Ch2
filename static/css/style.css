@@ -291,6 +291,39 @@ body {
     width: 100%;
     accent-color: var(--primary);
     cursor: pointer;
+    margin-top: 2px;
+}
+
+.k-presets {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.btn-k-preset {
+    flex: 1;
+    background-color: #F1F5F9;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px 0;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: center;
+}
+
+.btn-k-preset:hover {
+    background-color: var(--primary-light);
+    color: var(--primary);
+    border-color: var(--border-hover);
+}
+
+.btn-k-preset.active {
+    background-color: var(--primary);
+    color: #FFFFFF;
+    border-color: var(--primary);
 }
 
 .param-select {

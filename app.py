@@ -113,7 +113,7 @@ def predict():
 
     # User parameters
     k_val = int(request.form.get("k", 3))
-    k_val = max(1, min(k_val, min(15, len(X_train))))
+    k_val = max(1, min(k_val, min(60, len(X_train))))
     
     metric = request.form.get("metric", "euclidean").lower()
     if metric not in ["euclidean", "manhattan", "cosine"]:

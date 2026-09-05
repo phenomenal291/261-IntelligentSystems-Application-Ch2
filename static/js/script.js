@@ -351,9 +351,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 50);
     }
 
-    kSlider.addEventListener('input', (e) => {
-        kBadge.textContent = e.target.value;
+    function updateKValue(val) {
+        const kNum = parseInt(val);
+        kSlider.value = kNum;
+        kBadge.textContent = kNum;
+
+        // Update active preset button styling
+        document.querySelectorAll('.btn-k-preset').forEach(btn => {
+            if (parseInt(btn.dataset.k) === kNum) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
         triggerDebouncedPrediction();
+    }
+
+    kSlider.addEventListener('input', (e) => {
+        updateKValue(e.target.value);
+    });
+
+    document.querySelectorAll('.btn-k-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            updateKValue(btn.dataset.k);
+        });
     });
 
     metricSelect.addEventListener('change', triggerDebouncedPrediction);

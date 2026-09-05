@@ -62,7 +62,15 @@
                                 <label for="kSlider">Neighbors (K):</label>
                                 <span id="kBadge" class="k-badge">3</span>
                             </div>
-                            <input type="range" id="kSlider" min="1" max="9" step="1" value="3" class="param-slider">
+                            <input type="range" id="kSlider" min="1" max="45" step="1" value="3" class="param-slider">
+                            <div class="k-presets" id="kPresets">
+                                <button type="button" class="btn-k-preset" data-k="1">K=1</button>
+                                <button type="button" class="btn-k-preset active" data-k="3">K=3</button>
+                                <button type="button" class="btn-k-preset" data-k="7">K=7</button>
+                                <button type="button" class="btn-k-preset" data-k="15">K=15</button>
+                                <button type="button" class="btn-k-preset" data-k="25">K=25</button>
+                                <button type="button" class="btn-k-preset" data-k="45">K=45</button>
+                            </div>
                         </div>
 
                         <div class="param-group">
