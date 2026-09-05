@@ -173,16 +173,15 @@ def train_and_export():
     pca = PCA(n_components=2, random_state=42)
     X_2d = pca.fit_transform(X)
 
-    # Fit full KNN
-    knn_full = KNeighborsClassifier(n_neighbors=3, metric='euclidean', weights='distance')
-    knn_full.fit(X, y)
+    # Cast to float32 for compact memory and fast network transfer (<12 MB)
+    X_f32 = X.astype(np.float32)
+    X_2d_f32 = X_2d.astype(np.float32)
 
     model_payload = {
-        "model": knn_full,
-        "X_train": X,
+        "X_train": X_f32,
         "y_train": y,
         "pca": pca,
-        "X_2d": X_2d,
+        "X_2d": X_2d_f32,
         "class_names": CLASS_NAMES,
         "class_colors": CLASS_COLORS,
         "classes_": np.unique(y),
@@ -191,8 +190,9 @@ def train_and_export():
     }
 
     model_path = os.path.join(models_dir, "knn_traffic_sign_model.pkl")
-    joblib.dump(model_payload, model_path)
-    print(f"Step 3: Model, PCA 2D embedding, and metadata exported to: {model_path}")
+    joblib.dump(model_payload, model_path, compress=3)
+    file_size_mb = os.path.getsize(model_path) / (1024 * 1024)
+    print(f"Step 3: Compact Model payload ({file_size_mb:.2f} MB), PCA 2D embedding, and metadata exported to: {model_path}")
 
 if __name__ == "__main__":
     train_and_export()
