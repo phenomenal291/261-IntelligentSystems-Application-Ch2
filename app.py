@@ -10,20 +10,39 @@ import time
 import base64
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from PIL import Image
+from skimage.feature import hog
 import numpy as np
 from sklearn.metrics.pairwise import pairwise_distances
 import joblib
 
-try:
-    from traffic_sign_knn_app.train import extract_features_from_image, CLASS_COLORS, CLASS_NAMES
-except ImportError:
-    from train import extract_features_from_image, CLASS_COLORS, CLASS_NAMES
-
-app = Flask(__name__)
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+STATIC_DIR = os.path.join(BASE_DIR, "static")
 MODEL_PATH = os.path.join(BASE_DIR, "models", "knn_traffic_sign_model.pkl")
 SAMPLES_DIR = os.path.join(BASE_DIR, "data", "test_samples")
+
+app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
+
+# 52 Category Color Palette
+CLASS_COLORS_DEFAULT = {
+    "speed_5": "#EF4444", "speed_15": "#F97316", "speed_30": "#FB923C", "speed_40": "#F59E0B",
+    "speed_50": "#EAB308", "speed_60": "#FACC15", "speed_70": "#F59E0B", "speed_80": "#D97706",
+    "dont_straight_left": "#DC2626", "priority_road": "#EAB308", "dont_straight": "#DC2626",
+    "dont_left": "#DC2626", "dont_left_right": "#DC2626", "dont_right": "#DC2626",
+    "dont_overtake_left": "#B91C1C", "no_uturn": "#DC2626", "no_car": "#DC2626",
+    "no_horn": "#DC2626", "no_entry": "#EF4444", "no_stopping": "#DC2626",
+    "go_straight_right": "#3B82F6", "go_straight": "#3B82F6", "go_left": "#3B82F6",
+    "go_left_right": "#3B82F6", "go_right": "#3B82F6", "keep_left": "#2563EB",
+    "keep_right": "#2563EB", "roundabout": "#2563EB", "watch_out_cars": "#F59E0B",
+    "horn": "#3B82F6", "bicycles_crossing": "#F59E0B", "uturn": "#3B82F6",
+    "road_divider": "#F59E0B", "hazard_warning": "#F59E0B", "danger_ahead": "#EF4444",
+    "zebra_crossing": "#3B82F6", "cyclists_ahead": "#F59E0B", "children_crossing": "#F59E0B",
+    "curve_left": "#F59E0B", "curve_right": "#F59E0B", "road_hazard": "#F59E0B",
+    "info_sign": "#3B82F6", "regulatory_sign": "#3B82F6", "go_right_straight": "#3B82F6",
+    "go_left_straight": "#3B82F6", "speed_notice": "#3B82F6", "zigzag_curve": "#F59E0B",
+    "train_crossing": "#EF4444", "under_construction": "#EA580C", "traffic_notice": "#3B82F6",
+    "fences": "#F59E0B", "heavy_accidents": "#DC2626"
+}
 
 print(f"Loading pre-trained model payload from {MODEL_PATH}...")
 if not os.path.exists(MODEL_PATH):
@@ -36,12 +55,84 @@ pca_feat = model_payload.get("pca_feat")
 pca_2d = model_payload.get("pca_2d")
 X_2d_sub = model_payload.get("X_2d_sub", model_payload.get("X_2d"))
 y_2d_sub = model_payload.get("y_2d_sub", y_train)
-class_names_map = model_payload.get("class_names", CLASS_NAMES)
-class_colors_map = model_payload.get("class_colors", CLASS_COLORS)
+class_names_map = model_payload.get("class_names", {})
+class_colors_map = model_payload.get("class_colors", CLASS_COLORS_DEFAULT)
 classes_list = list(model_payload.get("classes_", np.unique(y_train)))
 exemplar_b64 = model_payload.get("exemplar_b64", {})
 
 print(f"Server ready! ({len(X_train)} training vectors, {len(classes_list)} classes)")
+
+
+def extract_features_from_image(img_input, return_hog_image=False):
+    """
+    Multi-modal feature extractor matching train.py exactly.
+    """
+    if isinstance(img_input, str):
+        img = Image.open(img_input).convert("RGB")
+    else:
+        img = img_input.convert("RGB")
+
+    # Resize to standard 64x64
+    img_64 = img.resize((64, 64), Image.Resampling.BILINEAR)
+    gray_64 = np.array(img_64.convert("L"), dtype=float) / 255.0
+
+    # 1. Global HOG
+    if return_hog_image:
+        hog_global, hog_image = hog(
+            gray_64,
+            orientations=8,
+            pixels_per_cell=(8, 8),
+            cells_per_block=(2, 2),
+            block_norm='L2-Hys',
+            visualize=True
+        )
+    else:
+        hog_global = hog(
+            gray_64,
+            orientations=8,
+            pixels_per_cell=(8, 8),
+            cells_per_block=(2, 2),
+            block_norm='L2-Hys',
+            visualize=False
+        )
+        hog_image = None
+
+    # 2. Center Crop HOG (inner 36x36)
+    center_crop = gray_64[14:50, 14:50]
+    hog_center = hog(
+        center_crop,
+        orientations=8,
+        pixels_per_cell=(6, 6),
+        cells_per_block=(2, 2),
+        block_norm='L2-Hys',
+        visualize=False
+    )
+
+    # 3. Center Normalized Pixel Template (24x24)
+    center_24 = np.array(img.convert("L").resize((24, 24), Image.Resampling.BILINEAR), dtype=float) / 255.0
+    c_mean, c_std = center_24.mean(), center_24.std()
+    center_norm = (center_24 - c_mean) / (c_std + 1e-5)
+    center_vec = center_norm.flatten() * 0.15
+
+    # 4. Color HSV & RGB Statistics
+    hsv_64 = np.array(img_64.convert("HSV"), dtype=float) / 255.0
+    hue_hist, _ = np.histogram(hsv_64[:, :, 0], bins=8, range=(0.0, 1.0), density=True)
+    sat_mean = np.mean(hsv_64[:, :, 1])
+    val_mean = np.mean(hsv_64[:, :, 2])
+
+    red_mask = ((hsv_64[:, :, 0] < 0.08) | (hsv_64[:, :, 0] > 0.92)) & (hsv_64[:, :, 1] > 0.25)
+    blue_mask = (hsv_64[:, :, 0] >= 0.50) & (hsv_64[:, :, 0] <= 0.72) & (hsv_64[:, :, 1] > 0.25)
+    yellow_mask = (hsv_64[:, :, 0] >= 0.10) & (hsv_64[:, :, 0] <= 0.20) & (hsv_64[:, :, 1] > 0.25)
+
+    color_feats = np.hstack([
+        hue_hist * 0.05,
+        [sat_mean * 0.2, val_mean * 0.2,
+         red_mask.mean() * 0.4, blue_mask.mean() * 0.4, yellow_mask.mean() * 0.4]
+    ])
+
+    feature_vec = np.hstack([hog_global, hog_center, center_vec, color_feats]).astype(np.float32)
+    return feature_vec, hog_image, img_64
+
 
 def render_hog_to_base64_fast(hog_image_arr):
     if hog_image_arr is None:
@@ -53,9 +144,11 @@ def render_hog_to_base64_fast(hog_image_arr):
     buf.seek(0)
     return base64.b64encode(buf.getvalue()).decode('utf-8')
 
+
 @app.route("/")
 def index():
     return render_template("index.html")
+
 
 @app.route("/api/feature_map", methods=["GET"])
 def get_feature_map():
@@ -77,6 +170,7 @@ def get_feature_map():
         "class_colors": class_colors_map
     })
 
+
 @app.route("/api/samples", methods=["GET"])
 def get_samples():
     """Returns curated subset of quick test sample chips."""
@@ -93,13 +187,16 @@ def get_samples():
                 })
     return jsonify({"samples": samples})
 
+
 @app.route("/static/<path:filename>")
 def serve_static(filename):
-    return send_from_directory(os.path.join(BASE_DIR, "static"), filename)
+    return send_from_directory(STATIC_DIR, filename)
+
 
 @app.route("/sample_image/<filename>")
 def serve_sample(filename):
     return send_from_directory(SAMPLES_DIR, filename)
+
 
 @app.route("/predict", methods=["POST"])
 def predict():

@@ -14,7 +14,6 @@ import base64
 import time
 import shutil
 import numpy as np
-import pandas as pd
 from PIL import Image
 from skimage.feature import hog
 from sklearn.neighbors import KNeighborsClassifier
