@@ -262,10 +262,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentImageFile = dataURLtoFile(sample.data_url, sample.filename);
                 currentImageSrc = sample.data_url;
             } else {
+                currentImageSrc = sample.url;
                 const res = await fetch(sample.url);
                 const blob = await res.blob();
                 currentImageFile = new File([blob], sample.filename, { type: 'image/png' });
-                currentImageSrc = URL.createObjectURL(blob);
             }
             displayPreview(currentImageSrc);
             showToast(`Loaded: ${sample.name}`);
@@ -370,7 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 9. Instant Parameter Re-Evaluation
     function triggerDebouncedPrediction() {
-        if (!currentImageFile) return;
+        if (!currentImageFile && !currentImageSrc) return;
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
             runPrediction();
@@ -407,11 +407,11 @@ document.addEventListener('DOMContentLoaded', () => {
     metricSelect.addEventListener('change', triggerDebouncedPrediction);
     weightsSelect.addEventListener('change', triggerDebouncedPrediction);
 
-    // 10. Run Prediction with Multipart + JSON Fallback
+    // 10. Run Prediction with Direct /api/predict JSON Payload
     btnClassify.addEventListener('click', runPrediction);
 
     async function runPrediction() {
-        if (!currentImageFile || isProcessing) return;
+        if ((!currentImageFile && !currentImageSrc) || isProcessing) return;
 
         isProcessing = true;
         btnClassify.disabled = true;
@@ -425,30 +425,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let success = false;
         let lastErrorMessage = '';
 
-        // Strategy A: Multipart Form Data
-        try {
-            const formData = new FormData();
-            formData.append('image', currentImageFile);
-            formData.append('k', k);
-            formData.append('metric', metric);
-            formData.append('weights', weights);
-
-            const res = await fetch('/predict', { method: 'POST', body: formData });
-            const data = await res.json();
-            if (res.ok && data.success) {
-                renderResults(data);
-                success = true;
-            } else {
-                lastErrorMessage = data.error || `Server responded with ${res.status}`;
-            }
-        } catch (err) {
-            console.warn('Multipart predict failed, trying JSON fallback:', err);
-        }
-
-        // Strategy B: JSON Payload with Base64 Image
-        if (!success && currentImageSrc) {
+        // Primary Strategy: JSON payload directly to /api/predict
+        if (currentImageSrc) {
             try {
-                const resJson = await fetch('/predict', {
+                const resJson = await fetch('/api/predict', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -463,15 +443,62 @@ document.addEventListener('DOMContentLoaded', () => {
                     renderResults(data);
                     success = true;
                 } else {
-                    lastErrorMessage = data.error || `Server responded with ${resJson.status}`;
+                    lastErrorMessage = data.error || `Server status ${resJson.status}`;
                 }
             } catch (err) {
-                console.warn('JSON predict fallback failed:', err);
+                console.warn('JSON /api/predict failed, trying fallback:', err);
+            }
+        }
+
+        // Secondary Strategy: Multipart Form Data to /api/predict
+        if (!success && currentImageFile) {
+            try {
+                const formData = new FormData();
+                formData.append('image', currentImageFile);
+                formData.append('k', k);
+                formData.append('metric', metric);
+                formData.append('weights', weights);
+
+                const res = await fetch('/api/predict', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    renderResults(data);
+                    success = true;
+                } else {
+                    lastErrorMessage = data.error || `Server status ${res.status}`;
+                }
+            } catch (err) {
+                console.warn('Multipart /api/predict failed:', err);
+            }
+        }
+
+        // Tertiary Strategy: Fallback to root /predict
+        if (!success && currentImageSrc) {
+            try {
+                const res = await fetch('/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_b64: currentImageSrc,
+                        k: k,
+                        metric: metric,
+                        weights: weights
+                    })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    renderResults(data);
+                    success = true;
+                } else {
+                    lastErrorMessage = data.error || `Server status ${res.status}`;
+                }
+            } catch (err) {
+                console.warn('Fallback /predict failed:', err);
             }
         }
 
         if (!success) {
-            showToast(lastErrorMessage ? `Error: ${lastErrorMessage}` : 'Connection failed. Retrying...');
+            showToast(lastErrorMessage ? `Error: ${lastErrorMessage}` : 'Prediction failed. Please try again.');
         }
 
         scanBar.classList.add('hidden');

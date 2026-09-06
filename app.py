@@ -29,11 +29,21 @@ class PrefixMiddleware(object):
         self.wsgi_app = wsgi_app
 
     def __call__(self, environ, start_response):
+        # If proxy passed original URI in HTTP headers, restore it if rewritten to index.py
+        forwarded_uri = (
+            environ.get("HTTP_X_FORWARDED_URI")
+            or environ.get("HTTP_X_NOW_ROUTE_MATCHES")
+            or environ.get("RAW_URI")
+            or environ.get("REQUEST_URI")
+        )
+        if forwarded_uri and environ.get("PATH_INFO") in ["/api/index.py", "/api/index", "/api"]:
+            clean_path = forwarded_uri.split("?")[0]
+            if clean_path:
+                environ["PATH_INFO"] = clean_path
+
         path = environ.get("PATH_INFO", "")
-        for prefix in ["/api/index.py", "/api/index", "/api"]:
-            if path.startswith(prefix):
-                path = path[len(prefix):] or "/"
-                break
+        while "//" in path:
+            path = path.replace("//", "/")
         environ["PATH_INFO"] = path
         return self.wsgi_app(environ, start_response)
 
@@ -183,12 +193,16 @@ def render_hog_to_base64_fast(hog_image_arr):
     return base64.b64encode(buf.getvalue()).decode('utf-8')
 
 
-@app.route("/")
-@app.route("/api")
-@app.route("/api/")
-@app.route("/api/index")
-@app.route("/api/index.py")
+@app.route("/", methods=["GET", "POST", "OPTIONS"])
+@app.route("/api", methods=["GET", "POST", "OPTIONS"])
+@app.route("/api/", methods=["GET", "POST", "OPTIONS"])
+@app.route("/api/index", methods=["GET", "POST", "OPTIONS"])
+@app.route("/api/index.py", methods=["GET", "POST", "OPTIONS"])
 def index():
+    if request.method == "OPTIONS":
+        return jsonify({"success": True}), 200
+    if request.method == "POST":
+        return predict()
     return render_template("index.html", samples=PRE_CACHED_SAMPLES)
 
 
