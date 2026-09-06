@@ -738,11 +738,17 @@ body {
                     </div>
                 </div>
 
-                <!-- Sample Chips -->
+                <!-- Sample Chips (Server-side pre-rendered for instant visibility) -->
                 <div class="samples-bar">
                     <span class="samples-title">Quick Samples:</span>
                     <div class="samples-list" id="samplesList">
-                        <!-- Populated via JS -->
+                        {% if samples %}
+                            {% for sample in samples %}
+                            <button type="button" class="sample-chip" data-sample='{{ sample | tojson }}'>
+                                {{ sample.name }}
+                            </button>
+                            {% endfor %}
+                        {% endif %}
                     </div>
                 </div>
 
@@ -943,22 +949,43 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => toast.classList.add('hidden'), 2200);
     }
 
+    // Attach listeners to any server-rendered sample chips
+    function setupSampleChips() {
+        document.querySelectorAll('.sample-chip').forEach(chip => {
+            chip.onclick = () => {
+                if (chip.dataset.sample) {
+                    try {
+                        const sample = JSON.parse(chip.dataset.sample);
+                        selectSample(sample);
+                    } catch (e) {
+                        console.error('Error parsing sample data:', e);
+                    }
+                }
+            };
+        });
+    }
+
     // 1. Initialize & Fetch Static Feature Map Data
     async function init() {
+        setupSampleChips();
+
         try {
-            // Load sample signs
-            let resSamples = await fetch('/api/samples').catch(() => fetch('/samples'));
-            if (resSamples && resSamples.ok) {
-                const dataSamples = await resSamples.json();
-                samplesList.innerHTML = '';
-                dataSamples.samples.forEach(sample => {
-                    const chip = document.createElement('button');
-                    chip.type = 'button';
-                    chip.className = 'sample-chip';
-                    chip.textContent = sample.name;
-                    chip.addEventListener('click', () => selectSample(sample));
-                    samplesList.appendChild(chip);
-                });
+            // If samples are not pre-rendered, fetch dynamically
+            if (!document.querySelectorAll('.sample-chip').length) {
+                let resSamples = await fetch('/api/samples').catch(() => fetch('/samples'));
+                if (resSamples && resSamples.ok) {
+                    const dataSamples = await resSamples.json();
+                    samplesList.innerHTML = '';
+                    dataSamples.samples.forEach(sample => {
+                        const chip = document.createElement('button');
+                        chip.type = 'button';
+                        chip.className = 'sample-chip';
+                        chip.dataset.sample = JSON.stringify(sample);
+                        chip.textContent = sample.name;
+                        chip.addEventListener('click', () => selectSample(sample));
+                        samplesList.appendChild(chip);
+                    });
+                }
             }
 
             // Load 2D Feature Map points

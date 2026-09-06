@@ -76,7 +76,24 @@ class_colors_map = model_payload.get("class_colors", CLASS_COLORS_DEFAULT)
 classes_list = list(model_payload.get("classes_", np.unique(y_train)))
 exemplar_b64 = model_payload.get("exemplar_b64", {})
 
-print(f"Server ready! ({len(X_train)} training vectors, {len(classes_list)} classes)")
+# Pre-cache Quick Samples with Base64 Data URIs in memory
+PRE_CACHED_SAMPLES = []
+if os.path.exists(SAMPLES_DIR):
+    for fname in sorted(os.listdir(SAMPLES_DIR)):
+        if fname.endswith(".png"):
+            cls_key = fname.replace("_sample.png", "")
+            fpath = os.path.join(SAMPLES_DIR, fname)
+            with open(fpath, "rb") as f:
+                b64_str = base64.b64encode(f.read()).decode("utf-8")
+            PRE_CACHED_SAMPLES.append({
+                "filename": fname,
+                "class_key": cls_key,
+                "name": class_names_map.get(cls_key, cls_key),
+                "url": f"/sample_image/{fname}",
+                "data_url": f"data:image/png;base64,{b64_str}"
+            })
+
+print(f"Server ready! ({len(X_train)} training vectors, {len(classes_list)} classes, {len(PRE_CACHED_SAMPLES)} pre-cached samples)")
 
 
 def extract_features_from_image(img_input, return_hog_image=False):
@@ -165,7 +182,7 @@ def render_hog_to_base64_fast(hog_image_arr):
 @app.route("/api/index")
 @app.route("/api/index.py")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", samples=PRE_CACHED_SAMPLES)
 
 
 @app.route("/api/feature_map", methods=["GET"])
@@ -194,22 +211,7 @@ def get_feature_map():
 @app.route("/samples", methods=["GET"])
 def get_samples():
     """Returns curated subset of quick test sample chips with embedded base64 data URIs."""
-    samples = []
-    if os.path.exists(SAMPLES_DIR):
-        for fname in sorted(os.listdir(SAMPLES_DIR)):
-            if fname.endswith(".png"):
-                cls_key = fname.replace("_sample.png", "")
-                fpath = os.path.join(SAMPLES_DIR, fname)
-                with open(fpath, "rb") as f:
-                    b64_str = base64.b64encode(f.read()).decode("utf-8")
-                samples.append({
-                    "filename": fname,
-                    "class_key": cls_key,
-                    "name": class_names_map.get(cls_key, cls_key),
-                    "url": f"/sample_image/{fname}",
-                    "data_url": f"data:image/png;base64,{b64_str}"
-                })
-    return jsonify({"samples": samples})
+    return jsonify({"samples": PRE_CACHED_SAMPLES})
 
 
 @app.route("/static/<path:filename>")
