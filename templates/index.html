@@ -4,7 +4,702 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Traffic Sign Recognition (KNN Feature Map)</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+:root {
+    --bg: #F8FAFC;
+    --card-bg: #FFFFFF;
+    --text-main: #0F172A;
+    --text-muted: #64748B;
+    --text-light: #94A3B8;
+    --primary: #2563EB;
+    --primary-hover: #1D4ED8;
+    --primary-light: #EFF6FF;
+    --border: #E2E8F0;
+    --border-hover: #93C5FD;
+    --success: #10B981;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg);
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 20px 14px;
+}
+
+.app-container {
+    width: 100%;
+    max-width: 1200px;
+}
+
+/* Header */
+.app-header {
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.app-header h1 {
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: -0.4px;
+    color: var(--text-main);
+}
+
+.app-header p {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* Main 2-Column Layout */
+.main-layout {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 18px;
+    align-items: start;
+}
+
+@media (max-width: 960px) {
+    .main-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Panels */
+.left-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.right-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Drop Zone */
+.drop-zone {
+    background-color: var(--card-bg);
+    border: 2px dashed var(--border);
+    border-radius: var(--radius-md);
+    padding: 18px 12px;
+    text-align: center;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+}
+
+.drop-zone:focus, .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--primary);
+    background-color: var(--primary-light);
+}
+
+.file-input {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.drop-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    pointer-events: none;
+}
+
+.upload-icon {
+    width: 28px;
+    height: 28px;
+    color: var(--primary);
+    margin-bottom: 2px;
+}
+
+.drop-text {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.drop-text span, .drop-text strong {
+    color: var(--primary);
+}
+
+/* Preview */
+.preview-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.scanner-box {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    background-color: #000000;
+    width: 90px;
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.preview-img {
+    max-height: 90px;
+    max-width: 90px;
+    object-fit: contain;
+    display: block;
+}
+
+.scan-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, rgba(37,99,235,0) 0%, rgba(59,130,246,1) 50%, rgba(37,99,235,0) 100%);
+    box-shadow: 0 0 8px 2px rgba(59, 130, 246, 0.8);
+    animation: scanAnim 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes scanAnim {
+    0% { top: 0%; }
+    100% { top: 96%; }
+}
+
+.btn-clear {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background-color: #EF4444;
+    color: white;
+    border: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+/* Sample Bar */
+.samples-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.samples-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.samples-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.sample-chip {
+    background-color: #F1F5F9;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 3px 7px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.sample-chip:hover {
+    background-color: var(--primary-light);
+    color: var(--primary);
+    border-color: var(--border-hover);
+}
+
+/* KNN Parameter Controls */
+.params-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    box-shadow: var(--shadow);
+}
+
+.params-header { margin-bottom: 6px; }
+.params-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.params-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.param-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.param-group label {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.param-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.k-badge {
+    background-color: var(--primary-light);
+    color: var(--primary);
+    font-weight: 700;
+    font-size: 0.74rem;
+    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+}
+
+.param-slider {
+    width: 100%;
+    accent-color: var(--primary);
+    cursor: pointer;
+    margin-top: 2px;
+}
+
+.k-presets {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.btn-k-preset {
+    flex: 1;
+    background-color: #F1F5F9;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px 0;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: center;
+}
+
+.btn-k-preset:hover {
+    background-color: var(--primary-light);
+    color: var(--primary);
+    border-color: var(--border-hover);
+}
+
+.btn-k-preset.active {
+    background-color: var(--primary);
+    color: #FFFFFF;
+    border-color: var(--primary);
+}
+
+.param-select {
+    padding: 4px 6px;
+    font-size: 0.76rem;
+    font-family: inherit;
+    color: var(--text-main);
+    background-color: #FFFFFF;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    outline: none;
+}
+
+/* Button */
+.btn-classify {
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 9px 14px;
+    font-size: 0.84rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s;
+    width: 100%;
+}
+
+.btn-classify:hover:not(:disabled) {
+    background-color: var(--primary-hover);
+}
+
+.btn-classify:disabled {
+    background-color: #CBD5E1;
+    cursor: not-allowed;
+}
+
+/* Educational Cards */
+.edu-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    box-shadow: var(--shadow);
+}
+
+.edu-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.edu-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.metric-tag {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--primary);
+    background-color: var(--primary-light);
+    padding: 1px 6px;
+    border-radius: 4px;
+}
+
+/* Feature Comparison */
+.feature-comparison {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 4px 0;
+}
+
+.feature-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+}
+
+.feature-thumb {
+    width: 50px;
+    height: 50px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    object-fit: contain;
+    background-color: #000000;
+}
+
+.feature-card span {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.feature-arrow {
+    font-size: 1rem;
+    color: var(--text-light);
+}
+
+/* Result Banner */
+.result-banner {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    box-shadow: var(--shadow);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.badge-status {
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--primary);
+    letter-spacing: 0.5px;
+}
+
+.result-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.banner-stats {
+    display: flex;
+    gap: 12px;
+}
+
+.stat-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.stat-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.stat-val {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.stat-val.highlight {
+    color: var(--success);
+}
+
+/* Feature Map Card & Canvas */
+.map-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    box-shadow: var(--shadow);
+}
+
+.map-header {
+    margin-bottom: 8px;
+}
+
+.map-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.map-sub {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.canvas-wrapper {
+    position: relative;
+    width: 100%;
+    height: 310px;
+    background-color: #0F172A;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+#featureMapCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.canvas-tooltip {
+    position: absolute;
+    background-color: rgba(15, 23, 42, 0.92);
+    color: #FFFFFF;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    pointer-events: none;
+    border: 1px solid #334155;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    z-index: 20;
+}
+
+/* Voting Comparison Grid */
+.voting-comparison-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.voting-col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.vote-scheme-title {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.vote-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.vote-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.vote-row-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--text-main);
+}
+
+.vote-progress-track {
+    width: 100%;
+    height: 6px;
+    background-color: #F1F5F9;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.vote-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+/* Neighbors Grid */
+.neighbors-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+    gap: 6px;
+    margin-top: 4px;
+    max-height: 210px;
+    overflow-y: auto;
+    padding: 2px 4px 2px 0;
+}
+
+/* Custom Sleek Scrollbar */
+.neighbors-grid::-webkit-scrollbar {
+    width: 5px;
+}
+.neighbors-grid::-webkit-scrollbar-track {
+    background: #F1F5F9;
+    border-radius: 4px;
+}
+.neighbors-grid::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 4px;
+}
+.neighbors-grid::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
+}
+
+.neighbor-card {
+    background-color: #F8FAFC;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    text-align: center;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.neighbor-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06);
+    border-color: var(--border-hover);
+}
+
+.neighbor-rank {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--primary);
+    background-color: var(--primary-light);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.neighbor-img {
+    width: 36px;
+    height: 36px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    object-fit: contain;
+    background-color: #F1F5F9;
+}
+
+.neighbor-name {
+    font-size: 0.66rem;
+    font-weight: 600;
+    color: var(--text-main);
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 72px;
+}
+
+.neighbor-dist {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.60rem;
+    color: var(--text-muted);
+}
+
+/* Toast */
+.toast {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #1E293B;
+    color: #FFFFFF;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.76rem;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 100;
+    transition: opacity 0.3s;
+}
+
+.text-muted { color: var(--text-muted); font-size: 0.72rem; }
+.text-center { text-align: center; }
+.py-2 { padding: 8px 0; }
+.hidden { display: none !important; }
+
+</style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -185,6 +880,519 @@
     <!-- Toast Notification -->
     <div id="toast" class="toast hidden">Image pasted from clipboard!</div>
 
-    <script src="/static/js/script.js"></script>
+    <script>
+/**
+ * Traffic Sign KNN Recognition Client Script
+ * Visualizes 2D PCA Feature Space Map, Dual Voting Comparisons, & Top-K Neighbors
+ */
+
+document.addEventListener('DOMContentLoaded', () => {
+    let currentImageFile = null;
+    let currentImageSrc = null;
+    let isProcessing = false;
+    let debounceTimer = null;
+
+    // Feature Map Data
+    let mapData = null;
+    let query2D = null;
+    let activeNeighbors = [];
+    let canvasBounds = { xMin: -5, xMax: 5, yMin: -5, yMax: 5 };
+
+    // DOM Elements
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const dropContent = document.getElementById('dropContent');
+    const previewWrapper = document.getElementById('previewWrapper');
+    const imagePreview = document.getElementById('imagePreview');
+    const scanBar = document.getElementById('scanBar');
+    const btnClear = document.getElementById('btnClear');
+    const btnClassify = document.getElementById('btnClassify');
+    const samplesList = document.getElementById('samplesList');
+    const toast = document.getElementById('toast');
+
+    // Controls
+    const kSlider = document.getElementById('kSlider');
+    const kBadge = document.getElementById('kBadge');
+    const metricSelect = document.getElementById('metricSelect');
+    const weightsSelect = document.getElementById('weightsSelect');
+
+    // Result Elements
+    const resName = document.getElementById('resName');
+    const resConfidence = document.getElementById('resConfidence');
+    const resTime = document.getElementById('resTime');
+    const origThumb = document.getElementById('origThumb');
+    const hogThumb = document.getElementById('hogThumb');
+    const featureCompWrapper = document.getElementById('featureCompWrapper');
+    const featureCompPlaceholder = document.getElementById('featureCompPlaceholder');
+    const mapStatusTag = document.getElementById('mapStatusTag');
+    const uniformBars = document.getElementById('uniformBars');
+    const distanceBars = document.getElementById('distanceBars');
+    const neighborsTitle = document.getElementById('neighborsTitle');
+    const neighborsGrid = document.getElementById('neighborsGrid');
+
+    // Canvas
+    const canvas = document.getElementById('featureMapCanvas');
+    const ctx = canvas.getContext('2d');
+    const tooltip = document.getElementById('canvasTooltip');
+
+    function showToast(message) {
+        toast.textContent = message;
+        toast.classList.remove('hidden');
+        setTimeout(() => toast.classList.add('hidden'), 1800);
+    }
+
+    // 1. Initialize & Fetch Static Feature Map Data
+    async function init() {
+        try {
+            // Load sample signs
+            const resSamples = await fetch('/api/samples');
+            const dataSamples = await resSamples.json();
+            samplesList.innerHTML = '';
+            dataSamples.samples.forEach(sample => {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'sample-chip';
+                chip.textContent = sample.name;
+                chip.addEventListener('click', () => selectSample(sample));
+                samplesList.appendChild(chip);
+            });
+
+            // Load 2D Feature Map points
+            const resMap = await fetch('/api/feature_map');
+            mapData = await resMap.json();
+            computeCanvasBounds();
+            resizeCanvas();
+            drawFeatureMap();
+        } catch (err) {
+            console.error('Initialization error:', err);
+        }
+    }
+
+    function computeCanvasBounds() {
+        if (!mapData || !mapData.points.length) return;
+        const xs = mapData.points.map(p => p.x);
+        const ys = mapData.points.map(p => p.y);
+        const padX = (Math.max(...xs) - Math.min(...xs)) * 0.12 || 1;
+        const padY = (Math.max(...ys) - Math.min(...ys)) * 0.12 || 1;
+        canvasBounds = {
+            xMin: Math.min(...xs) - padX,
+            xMax: Math.max(...xs) + padX,
+            yMin: Math.min(...ys) - padY,
+            yMax: Math.max(...ys) + padY
+        };
+    }
+
+    function toCanvasCoords(x, y) {
+        const cw = canvas.width;
+        const ch = canvas.height;
+        const cx = ((x - canvasBounds.xMin) / (canvasBounds.xMax - canvasBounds.xMin)) * cw;
+        const cy = ch - ((y - canvasBounds.yMin) / (canvasBounds.yMax - canvasBounds.yMin)) * ch;
+        return { cx, cy };
+    }
+
+    function resizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio || 560;
+        canvas.height = rect.height * window.devicePixelRatio || 340;
+    }
+    window.addEventListener('resize', () => {
+        resizeCanvas();
+        drawFeatureMap();
+    });
+
+    // 2. Draw 2D Feature Space Map
+    function drawFeatureMap() {
+        if (!mapData || !ctx) return;
+        const cw = canvas.width;
+        const ch = canvas.height;
+        ctx.clearRect(0, 0, cw, ch);
+
+        // Draw subtle grid
+        ctx.strokeStyle = '#1E293B';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < cw; x += 40) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ch); ctx.stroke();
+        }
+        for (let y = 0; y < ch; y += 40) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cw, y); ctx.stroke();
+        }
+
+        // Draw connecting rays & radius circle if Query active
+        if (query2D && activeNeighbors.length > 0) {
+            const qPt = toCanvasCoords(query2D[0], query2D[1]);
+            
+            // Max neighbor distance for radius circle
+            let maxCanvasDist = 0;
+            activeNeighbors.forEach(n => {
+                const nPt = toCanvasCoords(n.x2d, n.y2d);
+                const dPx = Math.hypot(qPt.cx - nPt.cx, qPt.cy - nPt.cy);
+                if (dPx > maxCanvasDist) maxCanvasDist = dPx;
+
+                // Connecting Ray
+                ctx.beginPath();
+                ctx.moveTo(qPt.cx, qPt.cy);
+                ctx.lineTo(nPt.cx, nPt.cy);
+                ctx.strokeStyle = n.color || '#3B82F6';
+                ctx.lineWidth = 1.8;
+                ctx.setLineDash([4, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            });
+
+            // Enclosing Neighborhood Circle
+            if (maxCanvasDist > 0) {
+                ctx.beginPath();
+                ctx.arc(qPt.cx, qPt.cy, maxCanvasDist + 8, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+        }
+
+        // Draw all training cluster points
+        mapData.points.forEach(p => {
+            const pt = toCanvasCoords(p.x, p.y);
+            const isNeighbor = activeNeighbors.some(n => n.index === p.index);
+
+            ctx.beginPath();
+            ctx.arc(pt.cx, pt.cy, isNeighbor ? 5.5 : 3.5, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.fill();
+
+            if (isNeighbor) {
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        });
+
+        // Draw Query Point Star / Badge
+        if (query2D) {
+            const qPt = toCanvasCoords(query2D[0], query2D[1]);
+
+            // Outer glow pulse
+            ctx.beginPath();
+            ctx.arc(qPt.cx, qPt.cy, 12, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(234, 179, 8, 0.25)';
+            ctx.fill();
+
+            // Inner target
+            ctx.beginPath();
+            ctx.arc(qPt.cx, qPt.cy, 7, 0, Math.PI * 2);
+            ctx.fillStyle = '#EAB308';
+            ctx.fill();
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            // Label
+            ctx.fillStyle = '#F8FAFC';
+            ctx.font = 'bold 12px Inter, sans-serif';
+            ctx.fillText('Query (Q)', qPt.cx + 10, qPt.cy - 6);
+        }
+    }
+
+    // 3. Canvas Hover Tooltip
+    canvas.addEventListener('mousemove', (e) => {
+        if (!mapData) return;
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+        let found = null;
+        for (const p of mapData.points) {
+            const pt = toCanvasCoords(p.x, p.y);
+            if (Math.hypot(mouseX - pt.cx, mouseY - pt.cy) < 10) {
+                found = p;
+                break;
+            }
+        }
+
+        if (found) {
+            tooltip.classList.remove('hidden');
+            tooltip.style.left = `${e.clientX - rect.left + 12}px`;
+            tooltip.style.top = `${e.clientY - rect.top + 12}px`;
+            tooltip.textContent = `${found.name} (x: ${found.x}, y: ${found.y})`;
+        } else {
+            tooltip.classList.add('hidden');
+        }
+    });
+
+    canvas.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
+
+    // 4. Sample Selection
+    async function selectSample(sample) {
+        try {
+            const res = await fetch(sample.url);
+            const blob = await res.blob();
+            currentImageFile = new File([blob], sample.filename, { type: 'image/png' });
+            currentImageSrc = URL.createObjectURL(blob);
+            displayPreview(currentImageSrc);
+            showToast(`Loaded: ${sample.name}`);
+            runPrediction();
+        } catch (err) {
+            console.error('Error selecting sample:', err);
+        }
+    }
+
+    // 5. File Input Change
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+            handleFile(e.target.files[0]);
+        }
+    });
+
+    // 6. Clipboard Paste Support (Ctrl+V / Cmd+V)
+    window.addEventListener('paste', (e) => {
+        const items = (e.clipboardData || window.clipboardData).items;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                const blob = items[i].getAsFile();
+                const file = new File([blob], "pasted_image.png", { type: blob.type });
+                handleFile(file);
+                showToast("Image pasted from clipboard!");
+                break;
+            }
+        }
+    });
+
+    // 7. Drag & Drop Handlers
+    ['dragenter', 'dragover'].forEach(name => {
+        dropZone.addEventListener(name, (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach(name => {
+        dropZone.addEventListener(name, (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+        });
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            handleFile(e.dataTransfer.files[0]);
+        }
+    });
+
+    function handleFile(file) {
+        if (!file.type.startsWith('image/')) {
+            alert('Please select a valid image file (PNG/JPG).');
+            return;
+        }
+        currentImageFile = file;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            currentImageSrc = e.target.result;
+            displayPreview(currentImageSrc);
+            runPrediction();
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function displayPreview(src) {
+        imagePreview.src = src;
+        dropContent.classList.add('hidden');
+        previewWrapper.classList.remove('hidden');
+        btnClassify.disabled = false;
+    }
+
+    // 8. Clear Button
+    btnClear.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearInput();
+    });
+
+    function clearInput() {
+        currentImageFile = null;
+        currentImageSrc = null;
+        query2D = null;
+        activeNeighbors = [];
+        fileInput.value = '';
+        imagePreview.src = '';
+        previewWrapper.classList.add('hidden');
+        dropContent.classList.remove('hidden');
+        btnClassify.disabled = true;
+        scanBar.classList.add('hidden');
+        resName.textContent = 'Ready';
+        resConfidence.textContent = '--%';
+        resTime.textContent = '-- ms';
+        uniformBars.innerHTML = '<span class="text-muted">Run classification to view votes.</span>';
+        distanceBars.innerHTML = '<span class="text-muted">Run classification to view votes.</span>';
+        neighborsGrid.innerHTML = '<div class="text-muted text-center py-2">Select an image to inspect nearest training exemplars.</div>';
+        if (featureCompWrapper) featureCompWrapper.classList.add('hidden');
+        if (featureCompPlaceholder) featureCompPlaceholder.classList.remove('hidden');
+        drawFeatureMap();
+    }
+
+    // 9. Instant Parameter Re-Evaluation
+    function triggerDebouncedPrediction() {
+        if (!currentImageFile) return;
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            runPrediction();
+        }, 50);
+    }
+
+    function updateKValue(val) {
+        const kNum = parseInt(val);
+        kSlider.value = kNum;
+        kBadge.textContent = kNum;
+
+        // Update active preset button styling
+        document.querySelectorAll('.btn-k-preset').forEach(btn => {
+            if (parseInt(btn.dataset.k) === kNum) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        triggerDebouncedPrediction();
+    }
+
+    kSlider.addEventListener('input', (e) => {
+        updateKValue(e.target.value);
+    });
+
+    document.querySelectorAll('.btn-k-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            updateKValue(btn.dataset.k);
+        });
+    });
+
+    metricSelect.addEventListener('change', triggerDebouncedPrediction);
+    weightsSelect.addEventListener('change', triggerDebouncedPrediction);
+
+    // 10. Run Prediction
+    btnClassify.addEventListener('click', runPrediction);
+
+    async function runPrediction() {
+        if (!currentImageFile || isProcessing) return;
+
+        isProcessing = true;
+        btnClassify.disabled = true;
+        btnClassify.textContent = 'Classifying...';
+        scanBar.classList.remove('hidden');
+
+        const k = parseInt(kSlider.value) || 3;
+        const metric = metricSelect.value;
+        const weights = weightsSelect.value;
+
+        const formData = new FormData();
+        formData.append('image', currentImageFile);
+        formData.append('k', k);
+        formData.append('metric', metric);
+        formData.append('weights', weights);
+
+        try {
+            const response = await fetch('/predict', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                renderResults(data);
+            } else {
+                alert('Prediction error: ' + data.error);
+            }
+        } catch (err) {
+            console.error('Inference error:', err);
+            alert('Failed to connect to server.');
+        } finally {
+            scanBar.classList.add('hidden');
+            btnClassify.disabled = false;
+            btnClassify.innerHTML = '<span>⚡ Run KNN Classification</span>';
+            isProcessing = false;
+        }
+    }
+
+    // 11. Render Results, Feature Map, & Voting Bars
+    function renderResults(data) {
+        // Main stats
+        resName.textContent = data.predicted_class;
+        resConfidence.textContent = `${data.confidence}%`;
+        resTime.textContent = `${data.inference_time_ms} ms`;
+
+        // Update Map State
+        query2D = data.q_2d;
+        activeNeighbors = data.neighbors;
+        const metricName = data.metric.charAt(0).toUpperCase() + data.metric.slice(1);
+        const weightName = data.weights === 'distance' ? 'Weighted' : 'Uniform';
+        mapStatusTag.textContent = `K=${data.k} • ${metricName} • ${weightName}`;
+        neighborsTitle.textContent = `Top ${data.k} Nearest Neighbors Gallery`;
+
+        // Draw Map
+        drawFeatureMap();
+
+        // HOG Thumbnails
+        origThumb.src = currentImageSrc;
+        if (data.hog_image_b64) {
+            hogThumb.src = `data:image/png;base64,${data.hog_image_b64}`;
+        }
+        if (featureCompWrapper) featureCompWrapper.classList.remove('hidden');
+        if (featureCompPlaceholder) featureCompPlaceholder.classList.add('hidden');
+
+        // Render Voting Comparison Bars
+        renderVotingBars(uniformBars, data.voting_comparison.uniform, false);
+        renderVotingBars(distanceBars, data.voting_comparison.distance, true);
+
+        // Render Neighbors Gallery
+        neighborsGrid.innerHTML = '';
+        if (data.neighbors && data.neighbors.length > 0) {
+            data.neighbors.forEach(n => {
+                const card = document.createElement('div');
+                card.className = 'neighbor-card';
+
+                const imgSrc = n.image_b64 ? `data:image/png;base64,${n.image_b64}` : '/static/img/placeholder.png';
+                
+                card.innerHTML = `
+                    <div class="neighbor-rank">#${n.rank}</div>
+                    <img src="${imgSrc}" class="neighbor-img" alt="${n.class_name}">
+                    <div class="neighbor-name" title="${n.class_name}">${n.class_name}</div>
+                    <div class="neighbor-dist">d = ${n.distance.toFixed(3)}</div>
+                    <div class="neighbor-dist">w = ${n.weight}</div>
+                `;
+                neighborsGrid.appendChild(card);
+            });
+        }
+    }
+
+    function renderVotingBars(container, list, isDistance) {
+        container.innerHTML = '';
+        if (!list || !list.length) {
+            container.innerHTML = '<span class="text-muted">No votes.</span>';
+            return;
+        }
+
+        list.forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'vote-row';
+
+            const scoreLabel = isDistance ? `${item.score} pts (${item.percentage}%)` : `${item.score} votes (${item.percentage}%)`;
+
+            row.innerHTML = `
+                <div class="vote-row-meta">
+                    <span>${item.class_name}</span>
+                    <span>${scoreLabel}</span>
+                </div>
+                <div class="vote-progress-track">
+                    <div class="vote-progress-fill" style="width: ${item.percentage}%; background-color: ${item.color || '#3B82F6'};"></div>
+                </div>
+            `;
+            container.appendChild(row);
+        });
+    }
+
+    init();
+});
+
+</script>
 </body>
 </html>
