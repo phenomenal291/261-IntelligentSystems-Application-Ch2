@@ -23,6 +23,23 @@ SAMPLES_DIR = os.path.join(BASE_DIR, "data", "test_samples")
 
 app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 
+# WSGI Prefix Middleware for Vercel Serverless Routing
+class PrefixMiddleware(object):
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        path = environ.get("PATH_INFO", "")
+        # Normalize paths prefixed by Vercel's rewrite mechanism
+        if path.startswith("/api/index.py"):
+            path = path[len("/api/index.py"):] or "/"
+        elif path.startswith("/api/index"):
+            path = path[len("/api/index"):] or "/"
+        environ["PATH_INFO"] = path
+        return self.wsgi_app(environ, start_response)
+
+app.wsgi_app = PrefixMiddleware(app.wsgi_app)
+
 # 52 Category Color Palette
 CLASS_COLORS_DEFAULT = {
     "speed_5": "#EF4444", "speed_15": "#F97316", "speed_30": "#FB923C", "speed_40": "#F59E0B",
@@ -146,11 +163,16 @@ def render_hog_to_base64_fast(hog_image_arr):
 
 
 @app.route("/")
+@app.route("/api")
+@app.route("/api/")
+@app.route("/api/index")
+@app.route("/api/index.py")
 def index():
     return render_template("index.html")
 
 
 @app.route("/api/feature_map", methods=["GET"])
+@app.route("/feature_map", methods=["GET"])
 def get_feature_map():
     """Returns static 2D coordinates for canvas display."""
     points = []
@@ -172,6 +194,7 @@ def get_feature_map():
 
 
 @app.route("/api/samples", methods=["GET"])
+@app.route("/samples", methods=["GET"])
 def get_samples():
     """Returns curated subset of quick test sample chips."""
     samples = []
@@ -189,16 +212,19 @@ def get_samples():
 
 
 @app.route("/static/<path:filename>")
+@app.route("/api/static/<path:filename>")
 def serve_static(filename):
     return send_from_directory(STATIC_DIR, filename)
 
 
 @app.route("/sample_image/<filename>")
+@app.route("/api/sample_image/<filename>")
 def serve_sample(filename):
     return send_from_directory(SAMPLES_DIR, filename)
 
 
 @app.route("/predict", methods=["POST"])
+@app.route("/api/predict", methods=["POST"])
 def predict():
     t0 = time.perf_counter()
     
