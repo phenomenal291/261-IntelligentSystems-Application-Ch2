@@ -10,36 +10,58 @@ An end-to-end, lightweight web application that classifies road traffic signs in
 
 ## 📌 Project Overview
 
-This project demonstrates a real-world, practical computer vision application of the K-Nearest Neighbors algorithm:
-1. **Dataset**: Trained on **5,683 real-world traffic sign images** across **52 distinct classes** from the Kaggle Traffic Signs Dataset (`tuanai/traffic-signs-dataset`).
-2. **Multi-Modal Feature Engineering**:
-   - **Global HOG ($64\times 64$)**: Extracts outer boundary geometry and geometric contour.
-   - **Center Crop HOG ($36\times 36$)**: Captures inner glyphs, digits (speed limits), and arrows.
-   - **Normalized Center Template ($24\times 24$)**: Resolves fine numeric differences.
-   - **HSV & RGB Statistics**: Hue histograms, saturation, and color masks to distinguish red, blue, and yellow traffic signs.
-   - **PCA Dimensionality Reduction ($n=384$)**: Filters noise and compresses payload to **10.5 MB** for instant serverless startup.
-3. **Dynamic KNN Hyperparameter Controls**:
-   - **$K$ (Number of Neighbors)**: Slider range $K \in [1, 45]$ with instant presets ($K=1, 3, 7, 15, 25, 45$).
-   - **Distance Metric**: Euclidean ($L_2$), Manhattan ($L_1$), and Cosine Distance.
-   - **Voting Scheme**: Distance-Weighted ($w_i = 1/d_i$) and Uniform Majority voting.
-4. **Interactive Visualizations**:
-   - **2D PCA Feature Space Canvas**: Interactive 2D projection with query rays and neighbor radius bounding circle.
-   - **HOG Feature Map Visualizer**: Real-time gradient orientation map rendering.
-   - **Dual Voting Comparison**: Side-by-side breakdown of Uniform vs. Distance-weighted confidence.
-   - **Nearest Neighbors Gallery**: Exemplar cards with thumbnail images, distances, and vote weights.
+1. **Dataset**: Trained on **5,683 real-world images** across **52 distinct classes** from Kaggle (`tuanai/traffic-signs-dataset`).
+2. **Feature Engineering**:
+   - **Global HOG ($64\times 64$)**: Boundary geometry and contour.
+   - **Center Crop HOG ($36\times 36$)**: Inner glyphs, numerals, and arrows.
+   - **Normalized Center Template ($24\times 24$)**: Pixel intensity pattern.
+   - **HSV / RGB Statistics**: Hue histograms and color ratios (red, blue, yellow).
+   - **PCA ($n=384$)**: Filters noise and compresses payload to **10.5 MB**.
+3. **Interactive Controls & Visualizations**:
+   - **Hyperparameters**: $K \in [1, 45]$, Distance Metric (Cosine, Euclidean, Manhattan), and Voting (Distance-Weighted vs. Uniform).
+   - **2D Feature Map Canvas**: Real-time projection with query rays and neighbor radius circle.
+   - **HOG Feature Map**: Live gradient orientation visualizer.
+   - **Voting Breakdown**: Side-by-side comparison of Uniform vs. Distance-weighted confidence.
+   - **Exemplars Gallery**: Visual top-$K$ nearest neighbors with distances and weights.
 
 ---
 
-## 🚦 Model Performance
+## 📊 Evaluation & Benchmarks
 
-- **Training Samples**: 5,683 images
-- **Test Validation Set**: 433 images
-- **Accuracy**:
-  - $K=1$: **94.00%**
-  - $K=3$: **93.53%**
-  - $K=5$: **92.84%**
-  - $K=7$: **91.92%**
-- **Inference Latency**: **~15 - 35 ms** per image
+Evaluated on **433 hold-out real-world test images** across **52 classes**:
+
+### 1. Overall Performance ($K=3$, Cosine, Distance-Weighted)
+| Metric | Value |
+| :--- | :---: |
+| **Accuracy** | **93.53%** (94.00% at $K=1$) |
+| **Precision (Weighted)** | **95.19%** |
+| **Recall (Weighted)** | **93.53%** |
+| **F1-Score (Weighted)** | **93.43%** |
+
+### 2. Hyperparameter Comparison ($K$, Metric & Voting)
+| Metric | $K$ | Voting | Accuracy | Precision | F1-Score |
+| :--- | :---: | :--- | :---: | :---: | :---: |
+| **Cosine** | **1** | **Distance / Uniform** | **94.00%** | **95.57%** | **93.88%** |
+| **Cosine** | **3** | **Distance-Weighted** | **93.53%** | **95.19%** | **93.43%** |
+| Cosine | 3 | Uniform Majority | 84.53% | 88.43% | 84.15% |
+| Cosine | 7 | Distance-Weighted | 91.92% | 94.10% | 91.71% |
+| Cosine | 15 | Distance-Weighted | 89.15% | 92.60% | 88.79% |
+| Cosine | 25 | Distance-Weighted | 89.61% | 92.59% | 89.26% |
+| **Euclidean** | 1 | Distance / Uniform | 93.53% | 95.62% | 93.53% |
+| Euclidean | 3 | Distance-Weighted | 92.15% | 94.28% | 91.95% |
+| Euclidean | 7 | Distance-Weighted | 90.53% | 93.39% | 90.47% |
+| **Manhattan** | 1 | Distance / Uniform | 92.38% | 94.33% | 92.25% |
+| Manhattan | 3 | Distance-Weighted | 90.53% | 92.86% | 90.29% |
+
+*Insight: Distance-weighted voting ($w = 1/d$) prevents distant majority classes from dominating, maintaining high accuracy even at large $K$.*
+
+### 3. Inference Latency (Single CPU Query)
+| Pipeline Stage | Mean Latency | 95th Percentile |
+| :--- | :---: | :---: |
+| 1. Feature Extraction (HOG + Color) | 10.05 ms | 11.41 ms |
+| 2. PCA Projection (384 dims) | 1.38 ms | 5.34 ms |
+| 3. KNN Search & Sorting (5.6k points) | 5.95 ms | 8.36 ms |
+| **Total End-to-End Latency** | **17.38 ms** | **22.40 ms** (~57.5 FPS) |
 
 ---
 
@@ -48,21 +70,21 @@ This project demonstrates a real-world, practical computer vision application of
 ```
 traffic_sign_knn_app/
 ├── data/
-│   └── test_samples/          # Curated quick test sample images for 1-click evaluation
+│   └── test_samples/          # Curated quick test sample images
 ├── models/
-│   └── knn_traffic_sign_model.pkl  # Compressed pre-trained KNN & PCA model (10.5 MB)
+│   └── knn_traffic_sign_model.pkl  # Compressed model payload (10.5 MB)
 ├── static/
 │   ├── css/
-│   │   └── style.css          # Modern dark-mode responsive UI styling
+│   │   └── style.css          # Dark-mode responsive styling
 │   └── js/
-│       └── script.js          # Interactive canvas, clipboard paste, & AJAX inference client
+│       └── script.js          # Interactive canvas & client logic
 ├── templates/
-│   └── index.html             # Semantic drag-and-drop & paste interface
-├── train.py                   # Model training and feature extraction pipeline
-├── app.py                     # High-performance Flask inference server
-├── requirements.txt           # Python package dependencies
-├── vercel.json                # Vercel serverless deployment configuration
-└── README.md                  # Project documentation & reproduction guide
+│   └── index.html             # UI interface layout
+├── train.py                   # Model training & feature pipeline
+├── app.py                     # High-performance Flask server
+├── requirements.txt           # Python dependencies
+├── vercel.json                # Vercel serverless deployment config
+└── README.md                  # Project documentation & evaluation
 ```
 
 ---
@@ -75,29 +97,23 @@ git clone https://github.com/phenomenal291/261-IntelligentSystems-Application-Ch
 cd 261-IntelligentSystems-Application-Ch2
 ```
 
-### 2. Set Up Virtual Environment (Recommended)
+### 2. Set Up Virtual Environment & Dependencies
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-```
-
-### 3. Install Dependencies
-```bash
 pip install -r requirements.txt
 ```
 
-### 4. (Optional) Re-train the Model
-The pre-trained model is already included in `models/knn_traffic_sign_model.pkl`. To re-train:
+### 3. (Optional) Re-train the Model
 ```bash
 python train.py
 ```
 
-### 5. Launch the Web Application
+### 4. Launch the Web Application
 ```bash
 python app.py
 ```
-
-Open your browser at `http://127.0.0.1:5000`.
+Open `http://127.0.0.1:5000` in your browser.
 
 ---
 
