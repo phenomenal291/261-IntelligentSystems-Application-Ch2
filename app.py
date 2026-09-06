@@ -30,7 +30,6 @@ class PrefixMiddleware(object):
 
     def __call__(self, environ, start_response):
         path = environ.get("PATH_INFO", "")
-        # Normalize paths prefixed by Vercel's rewrite mechanism
         if path.startswith("/api/index.py"):
             path = path[len("/api/index.py"):] or "/"
         elif path.startswith("/api/index"):
@@ -81,9 +80,7 @@ print(f"Server ready! ({len(X_train)} training vectors, {len(classes_list)} clas
 
 
 def extract_features_from_image(img_input, return_hog_image=False):
-    """
-    Multi-modal feature extractor matching train.py exactly.
-    """
+    """Multi-modal feature extractor matching train.py exactly."""
     if isinstance(img_input, str):
         img = Image.open(img_input).convert("RGB")
     else:
@@ -196,17 +193,21 @@ def get_feature_map():
 @app.route("/api/samples", methods=["GET"])
 @app.route("/samples", methods=["GET"])
 def get_samples():
-    """Returns curated subset of quick test sample chips."""
+    """Returns curated subset of quick test sample chips with embedded base64 data URIs."""
     samples = []
     if os.path.exists(SAMPLES_DIR):
         for fname in sorted(os.listdir(SAMPLES_DIR)):
             if fname.endswith(".png"):
                 cls_key = fname.replace("_sample.png", "")
+                fpath = os.path.join(SAMPLES_DIR, fname)
+                with open(fpath, "rb") as f:
+                    b64_str = base64.b64encode(f.read()).decode("utf-8")
                 samples.append({
                     "filename": fname,
                     "class_key": cls_key,
                     "name": class_names_map.get(cls_key, cls_key),
-                    "url": f"/sample_image/{fname}"
+                    "url": f"/sample_image/{fname}",
+                    "data_url": f"data:image/png;base64,{b64_str}"
                 })
     return jsonify({"samples": samples})
 

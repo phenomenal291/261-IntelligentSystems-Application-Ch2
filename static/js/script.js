@@ -55,31 +55,35 @@ document.addEventListener('DOMContentLoaded', () => {
     function showToast(message) {
         toast.textContent = message;
         toast.classList.remove('hidden');
-        setTimeout(() => toast.classList.add('hidden'), 1800);
+        setTimeout(() => toast.classList.add('hidden'), 2200);
     }
 
     // 1. Initialize & Fetch Static Feature Map Data
     async function init() {
         try {
             // Load sample signs
-            const resSamples = await fetch('/api/samples');
-            const dataSamples = await resSamples.json();
-            samplesList.innerHTML = '';
-            dataSamples.samples.forEach(sample => {
-                const chip = document.createElement('button');
-                chip.type = 'button';
-                chip.className = 'sample-chip';
-                chip.textContent = sample.name;
-                chip.addEventListener('click', () => selectSample(sample));
-                samplesList.appendChild(chip);
-            });
+            let resSamples = await fetch('/api/samples').catch(() => fetch('/samples'));
+            if (resSamples && resSamples.ok) {
+                const dataSamples = await resSamples.json();
+                samplesList.innerHTML = '';
+                dataSamples.samples.forEach(sample => {
+                    const chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = 'sample-chip';
+                    chip.textContent = sample.name;
+                    chip.addEventListener('click', () => selectSample(sample));
+                    samplesList.appendChild(chip);
+                });
+            }
 
             // Load 2D Feature Map points
-            const resMap = await fetch('/api/feature_map');
-            mapData = await resMap.json();
-            computeCanvasBounds();
-            resizeCanvas();
-            drawFeatureMap();
+            let resMap = await fetch('/api/feature_map').catch(() => fetch('/feature_map'));
+            if (resMap && resMap.ok) {
+                mapData = await resMap.json();
+                computeCanvasBounds();
+                resizeCanvas();
+                drawFeatureMap();
+            }
         } catch (err) {
             console.error('Initialization error:', err);
         }
@@ -239,18 +243,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
     canvas.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
 
-    // 4. Sample Selection
+    // Helper: Base64 data URL to File object
+    function dataURLtoFile(dataurl, filename) {
+        const arr = dataurl.split(',');
+        const mime = arr[0].match(/:(.*?);/)[1];
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new File([u8arr], filename, { type: mime });
+    }
+
+    // 4. Sample Selection (Uses instant base64 Data URL)
     async function selectSample(sample) {
         try {
-            const res = await fetch(sample.url);
-            const blob = await res.blob();
-            currentImageFile = new File([blob], sample.filename, { type: 'image/png' });
-            currentImageSrc = URL.createObjectURL(blob);
+            if (sample.data_url) {
+                currentImageFile = dataURLtoFile(sample.data_url, sample.filename);
+                currentImageSrc = sample.data_url;
+            } else {
+                const res = await fetch(sample.url);
+                const blob = await res.blob();
+                currentImageFile = new File([blob], sample.filename, { type: 'image/png' });
+                currentImageSrc = URL.createObjectURL(blob);
+            }
             displayPreview(currentImageSrc);
             showToast(`Loaded: ${sample.name}`);
             runPrediction();
         } catch (err) {
             console.error('Error selecting sample:', err);
+            showToast('Failed to load sample image.');
         }
     }
 
@@ -385,7 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
     metricSelect.addEventListener('change', triggerDebouncedPrediction);
     weightsSelect.addEventListener('change', triggerDebouncedPrediction);
 
-    // 10. Run Prediction
+    // 10. Run Prediction with Automatic Fallback & Toast Feedback
     btnClassify.addEventListener('click', runPrediction);
 
     async function runPrediction() {
@@ -406,28 +429,41 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('metric', metric);
         formData.append('weights', weights);
 
-        try {
-            const response = await fetch('/predict', {
-                method: 'POST',
-                body: formData
-            });
+        let success = false;
+        const endpoints = ['/predict', '/api/predict'];
 
-            const data = await response.json();
+        for (const endpoint of endpoints) {
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
 
-            if (data.success) {
-                renderResults(data);
-            } else {
-                alert('Prediction error: ' + data.error);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        renderResults(data);
+                        success = true;
+                        break;
+                    } else {
+                        showToast(`Server: ${data.error || 'Prediction failed'}`);
+                        success = true;
+                        break;
+                    }
+                }
+            } catch (err) {
+                console.warn(`Endpoint ${endpoint} failed:`, err);
             }
-        } catch (err) {
-            console.error('Inference error:', err);
-            alert('Failed to connect to server.');
-        } finally {
-            scanBar.classList.add('hidden');
-            btnClassify.disabled = false;
-            btnClassify.innerHTML = '<span>⚡ Run KNN Classification</span>';
-            isProcessing = false;
         }
+
+        if (!success) {
+            showToast('Server warming up... please click again in a moment.');
+        }
+
+        scanBar.classList.add('hidden');
+        btnClassify.disabled = false;
+        btnClassify.innerHTML = '<span>⚡ Run KNN Classification</span>';
+        isProcessing = false;
     }
 
     // 11. Render Results, Feature Map, & Voting Bars
@@ -448,64 +484,74 @@ document.addEventListener('DOMContentLoaded', () => {
         // Draw Map
         drawFeatureMap();
 
-        // HOG Thumbnails
-        origThumb.src = currentImageSrc;
-        if (data.hog_image_b64) {
+        // Show HOG Visualizer
+        if (origThumb) origThumb.src = currentImageSrc;
+        if (hogThumb && data.hog_image_b64) {
             hogThumb.src = `data:image/png;base64,${data.hog_image_b64}`;
         }
         if (featureCompWrapper) featureCompWrapper.classList.remove('hidden');
         if (featureCompPlaceholder) featureCompPlaceholder.classList.add('hidden');
 
-        // Render Voting Comparison Bars
+        // Render Voting Breakdown Bars
         renderVotingBars(uniformBars, data.voting_comparison.uniform, false);
         renderVotingBars(distanceBars, data.voting_comparison.distance, true);
 
-        // Render Neighbors Gallery
-        neighborsGrid.innerHTML = '';
-        if (data.neighbors && data.neighbors.length > 0) {
-            data.neighbors.forEach(n => {
-                const card = document.createElement('div');
-                card.className = 'neighbor-card';
-
-                const imgSrc = n.image_b64 ? `data:image/png;base64,${n.image_b64}` : '/static/img/placeholder.png';
-                
-                card.innerHTML = `
-                    <div class="neighbor-rank">#${n.rank}</div>
-                    <img src="${imgSrc}" class="neighbor-img" alt="${n.class_name}">
-                    <div class="neighbor-name" title="${n.class_name}">${n.class_name}</div>
-                    <div class="neighbor-dist">d = ${n.distance.toFixed(3)}</div>
-                    <div class="neighbor-dist">w = ${n.weight}</div>
-                `;
-                neighborsGrid.appendChild(card);
-            });
-        }
+        // Render Nearest Neighbors Cards
+        renderNeighborsGrid(data.neighbors);
     }
 
     function renderVotingBars(container, list, isDistance) {
         container.innerHTML = '';
         if (!list || !list.length) {
-            container.innerHTML = '<span class="text-muted">No votes.</span>';
+            container.innerHTML = '<span class="text-muted">No votes</span>';
             return;
         }
 
-        list.forEach(item => {
+        list.slice(0, 4).forEach(item => {
             const row = document.createElement('div');
             row.className = 'vote-row';
 
-            const scoreLabel = isDistance ? `${item.score} pts (${item.percentage}%)` : `${item.score} votes (${item.percentage}%)`;
-
+            const scoreLabel = isDistance ? `w=${item.score}` : `${item.score} votes`;
             row.innerHTML = `
                 <div class="vote-row-meta">
-                    <span>${item.class_name}</span>
-                    <span>${scoreLabel}</span>
+                    <span class="truncate" title="${item.class_name}">${item.class_name}</span>
+                    <span>${item.percentage}% <span style="font-size:0.6rem; color:#94A3B8;">(${scoreLabel})</span></span>
                 </div>
                 <div class="vote-progress-track">
-                    <div class="vote-progress-fill" style="width: ${item.percentage}%; background-color: ${item.color || '#3B82F6'};"></div>
+                    <div class="vote-progress-fill" style="width: ${item.percentage}%; background-color: ${item.color};"></div>
                 </div>
             `;
             container.appendChild(row);
         });
     }
 
+    function renderNeighborsGrid(neighbors) {
+        neighborsGrid.innerHTML = '';
+        if (!neighbors || !neighbors.length) {
+            neighborsGrid.innerHTML = '<div class="text-muted text-center py-2">No neighbors found.</div>';
+            return;
+        }
+
+        neighbors.forEach(n => {
+            const card = document.createElement('div');
+            card.className = 'neighbor-card';
+
+            const imgHtml = n.image_b64
+                ? `<img src="data:image/png;base64,${n.image_b64}" class="neighbor-img" alt="${n.class_name}">`
+                : `<div class="neighbor-img-placeholder" style="background-color: ${n.color};"></div>`;
+
+            card.innerHTML = `
+                <span class="neighbor-rank">#${n.rank}</span>
+                ${imgHtml}
+                <div class="neighbor-meta">
+                    <span class="neighbor-name" title="${n.class_name}">${n.class_name}</span>
+                    <span class="neighbor-dist">d: ${n.distance}</span>
+                </div>
+            `;
+            neighborsGrid.appendChild(card);
+        });
+    }
+
+    // Start App
     init();
 });
