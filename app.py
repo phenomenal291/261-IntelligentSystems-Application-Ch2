@@ -231,26 +231,50 @@ def serve_sample(filename):
 def predict():
     t0 = time.perf_counter()
     
-    if "image" not in request.files:
-        return jsonify({"success": False, "error": "No image file provided."}), 400
+    img = None
+    k_val = 3
+    metric = "cosine"
+    weights = "distance"
 
-    file = request.files["image"]
-    if file.filename == "":
-        return jsonify({"success": False, "error": "Empty filename."}), 400
+    # 1. Parse Multipart Form Data or JSON Payload
+    if request.is_json:
+        data_json = request.get_json(silent=True) or {}
+        b64_str = data_json.get("image_b64", "")
+        if b64_str:
+            if "," in b64_str:
+                b64_str = b64_str.split(",")[1]
+            try:
+                img_bytes = base64.b64decode(b64_str)
+                img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+            except Exception as e:
+                return jsonify({"success": False, "error": f"Invalid base64 image: {str(e)}"}), 400
 
-    # User parameters
-    k_val = int(request.form.get("k", 3))
+        k_val = int(data_json.get("k", 3))
+        metric = data_json.get("metric", "cosine").lower()
+        weights = data_json.get("weights", "distance").lower()
+
+    elif "image" in request.files:
+        file = request.files["image"]
+        if file.filename != "":
+            try:
+                img = Image.open(io.BytesIO(file.read())).convert("RGB")
+            except Exception as e:
+                return jsonify({"success": False, "error": f"Invalid image file: {str(e)}"}), 400
+
+        k_val = int(request.form.get("k", 3))
+        metric = request.form.get("metric", "cosine").lower()
+        weights = request.form.get("weights", "distance").lower()
+
+    if img is None:
+        return jsonify({"success": False, "error": "No valid image provided."}), 400
+
+    # User parameter validation
     k_val = max(1, min(k_val, min(60, len(X_train))))
-    
-    metric = request.form.get("metric", "cosine").lower()
     if metric not in ["euclidean", "manhattan", "cosine"]:
         metric = "cosine"
-        
-    weights = request.form.get("weights", "distance").lower()
 
     try:
         # 1. Feature Extraction & HOG Map
-        img = Image.open(io.BytesIO(file.read())).convert("RGB")
         features_raw, hog_img_arr, _ = extract_features_from_image(img, return_hog_image=True)
         feat_raw_vec = features_raw.reshape(1, -1)
 

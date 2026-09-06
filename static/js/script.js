@@ -55,20 +55,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function showToast(message) {
         toast.textContent = message;
         toast.classList.remove('hidden');
-        setTimeout(() => toast.classList.add('hidden'), 2200);
+        setTimeout(() => toast.classList.add('hidden'), 2600);
     }
 
-    // Attach listeners to any server-rendered sample chips
+    // Attach click handlers to sample buttons by index
     function setupSampleChips() {
         document.querySelectorAll('.sample-chip').forEach(chip => {
             chip.onclick = () => {
-                if (chip.dataset.sample) {
-                    try {
-                        const sample = JSON.parse(chip.dataset.sample);
-                        selectSample(sample);
-                    } catch (e) {
-                        console.error('Error parsing sample data:', e);
-                    }
+                const idx = parseInt(chip.dataset.idx);
+                if (window.PRELOADED_SAMPLES && window.PRELOADED_SAMPLES[idx]) {
+                    selectSample(window.PRELOADED_SAMPLES[idx]);
                 }
             };
         });
@@ -79,24 +75,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setupSampleChips();
 
         try {
-            // If samples are not pre-rendered, fetch dynamically
-            if (!document.querySelectorAll('.sample-chip').length) {
-                let resSamples = await fetch('/api/samples').catch(() => fetch('/samples'));
-                if (resSamples && resSamples.ok) {
-                    const dataSamples = await resSamples.json();
-                    samplesList.innerHTML = '';
-                    dataSamples.samples.forEach(sample => {
-                        const chip = document.createElement('button');
-                        chip.type = 'button';
-                        chip.className = 'sample-chip';
-                        chip.dataset.sample = JSON.stringify(sample);
-                        chip.textContent = sample.name;
-                        chip.addEventListener('click', () => selectSample(sample));
-                        samplesList.appendChild(chip);
-                    });
-                }
-            }
-
             // Load 2D Feature Map points
             let resMap = await fetch('/api/feature_map').catch(() => fetch('/feature_map'));
             if (resMap && resMap.ok) {
@@ -429,7 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
     metricSelect.addEventListener('change', triggerDebouncedPrediction);
     weightsSelect.addEventListener('change', triggerDebouncedPrediction);
 
-    // 10. Run Prediction with Automatic Fallback & Toast Feedback
+    // 10. Run Prediction with Multipart + JSON Fallback
     btnClassify.addEventListener('click', runPrediction);
 
     async function runPrediction() {
@@ -444,41 +422,56 @@ document.addEventListener('DOMContentLoaded', () => {
         const metric = metricSelect.value;
         const weights = weightsSelect.value;
 
-        const formData = new FormData();
-        formData.append('image', currentImageFile);
-        formData.append('k', k);
-        formData.append('metric', metric);
-        formData.append('weights', weights);
-
         let success = false;
-        const endpoints = ['/predict', '/api/predict'];
+        let lastErrorMessage = '';
 
-        for (const endpoint of endpoints) {
+        // Strategy A: Multipart Form Data
+        try {
+            const formData = new FormData();
+            formData.append('image', currentImageFile);
+            formData.append('k', k);
+            formData.append('metric', metric);
+            formData.append('weights', weights);
+
+            const res = await fetch('/predict', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                renderResults(data);
+                success = true;
+            } else {
+                lastErrorMessage = data.error || `Server responded with ${res.status}`;
+            }
+        } catch (err) {
+            console.warn('Multipart predict failed, trying JSON fallback:', err);
+        }
+
+        // Strategy B: JSON Payload with Base64 Image
+        if (!success && currentImageSrc) {
             try {
-                const response = await fetch(endpoint, {
+                const resJson = await fetch('/predict', {
                     method: 'POST',
-                    body: formData
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_b64: currentImageSrc,
+                        k: k,
+                        metric: metric,
+                        weights: weights
+                    })
                 });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success) {
-                        renderResults(data);
-                        success = true;
-                        break;
-                    } else {
-                        showToast(`Server: ${data.error || 'Prediction failed'}`);
-                        success = true;
-                        break;
-                    }
+                const data = await resJson.json();
+                if (resJson.ok && data.success) {
+                    renderResults(data);
+                    success = true;
+                } else {
+                    lastErrorMessage = data.error || `Server responded with ${resJson.status}`;
                 }
             } catch (err) {
-                console.warn(`Endpoint ${endpoint} failed:`, err);
+                console.warn('JSON predict fallback failed:', err);
             }
         }
 
         if (!success) {
-            showToast('Server warming up... please click again in a moment.');
+            showToast(lastErrorMessage ? `Error: ${lastErrorMessage}` : 'Connection failed. Retrying...');
         }
 
         scanBar.classList.add('hidden');
