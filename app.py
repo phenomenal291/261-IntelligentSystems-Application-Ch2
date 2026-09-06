@@ -110,7 +110,27 @@ if os.path.exists(SAMPLES_DIR):
                 "data_url": f"data:image/png;base64,{b64_str}"
             })
 
-print(f"Server ready! ({len(X_train)} training vectors, {len(classes_list)} classes, {len(PRE_CACHED_SAMPLES)} pre-cached samples)")
+# Precompute 2D Feature Map Payload
+FEATURE_MAP_POINTS = []
+if X_2d_sub is not None and len(X_2d_sub) > 0:
+    for i in range(len(X_2d_sub)):
+        lbl = str(y_2d_sub[i])
+        FEATURE_MAP_POINTS.append({
+            "x": round(float(X_2d_sub[i, 0]), 2),
+            "y": round(float(X_2d_sub[i, 1]), 2),
+            "label": lbl,
+            "name": class_names_map.get(lbl, lbl),
+            "color": class_colors_map.get(lbl, "#3B82F6"),
+            "index": int(i)
+        })
+
+FEATURE_MAP_PAYLOAD = {
+    "points": FEATURE_MAP_POINTS,
+    "class_names": class_names_map,
+    "class_colors": class_colors_map
+}
+
+print(f"Server ready! ({len(X_train)} training vectors, {len(classes_list)} classes, {len(FEATURE_MAP_POINTS)} map points, {len(PRE_CACHED_SAMPLES)} pre-cached samples)")
 
 
 def extract_features_from_image(img_input, return_hog_image=False):
@@ -203,7 +223,7 @@ def index():
         return jsonify({"success": True}), 200
     if request.method == "POST":
         return predict()
-    return render_template("index.html", samples=PRE_CACHED_SAMPLES)
+    return render_template("index.html", samples=PRE_CACHED_SAMPLES, feature_map=FEATURE_MAP_PAYLOAD)
 
 
 @app.route("/api/feature_map", methods=["GET", "OPTIONS"])
@@ -212,23 +232,7 @@ def get_feature_map():
     """Returns static 2D coordinates for canvas display."""
     if request.method == "OPTIONS":
         return jsonify({"success": True}), 200
-
-    points = []
-    for i in range(len(X_2d_sub)):
-        lbl = str(y_2d_sub[i])
-        points.append({
-            "x": round(float(X_2d_sub[i, 0]), 3),
-            "y": round(float(X_2d_sub[i, 1]), 3),
-            "label": lbl,
-            "name": class_names_map.get(lbl, lbl),
-            "color": class_colors_map.get(lbl, "#3B82F6"),
-            "index": int(i)
-        })
-    return jsonify({
-        "points": points,
-        "class_names": class_names_map,
-        "class_colors": class_colors_map
-    })
+    return jsonify(FEATURE_MAP_PAYLOAD)
 
 
 @app.route("/api/samples", methods=["GET", "OPTIONS"])

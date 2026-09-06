@@ -70,51 +70,76 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 1. Initialize & Fetch Static Feature Map Data
+    // 1. Initialize & Render Feature Space Map
     async function init() {
         setupSampleChips();
 
-        try {
-            // Load 2D Feature Map points
-            let resMap = await fetch('/api/feature_map').catch(() => fetch('/feature_map'));
-            if (resMap && resMap.ok) {
-                mapData = await resMap.json();
-                computeCanvasBounds();
-                resizeCanvas();
-                drawFeatureMap();
+        if (window.PRELOADED_FEATURE_MAP && window.PRELOADED_FEATURE_MAP.points && window.PRELOADED_FEATURE_MAP.points.length > 0) {
+            mapData = window.PRELOADED_FEATURE_MAP;
+            computeCanvasBounds();
+            resizeCanvas();
+            drawFeatureMap();
+        } else {
+            try {
+                let resMap = await fetch('/api/feature_map').catch(() => fetch('/feature_map'));
+                if (resMap && resMap.ok) {
+                    mapData = await resMap.json();
+                    computeCanvasBounds();
+                    resizeCanvas();
+                    drawFeatureMap();
+                }
+            } catch (err) {
+                console.error('Initialization error fetching feature map:', err);
             }
-        } catch (err) {
-            console.error('Initialization error:', err);
         }
     }
 
     function computeCanvasBounds() {
-        if (!mapData || !mapData.points.length) return;
-        const xs = mapData.points.map(p => p.x);
-        const ys = mapData.points.map(p => p.y);
-        const padX = (Math.max(...xs) - Math.min(...xs)) * 0.12 || 1;
-        const padY = (Math.max(...ys) - Math.min(...ys)) * 0.12 || 1;
+        if (!mapData || !mapData.points || !mapData.points.length) {
+            canvasBounds = { xMin: -5, xMax: 5, yMin: -5, yMax: 5 };
+            return;
+        }
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (let i = 0; i < mapData.points.length; i++) {
+            const p = mapData.points[i];
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.y > maxY) maxY = p.y;
+        }
+        if (maxX <= minX) { minX -= 1; maxX += 1; }
+        if (maxY <= minY) { minY -= 1; maxY += 1; }
+
+        const padX = (maxX - minX) * 0.10 || 1;
+        const padY = (maxY - minY) * 0.10 || 1;
         canvasBounds = {
-            xMin: Math.min(...xs) - padX,
-            xMax: Math.max(...xs) + padX,
-            yMin: Math.min(...ys) - padY,
-            yMax: Math.max(...ys) + padY
+            xMin: minX - padX,
+            xMax: maxX + padX,
+            yMin: minY - padY,
+            yMax: maxY + padY
         };
     }
 
     function toCanvasCoords(x, y) {
-        const cw = canvas.width;
-        const ch = canvas.height;
-        const cx = ((x - canvasBounds.xMin) / (canvasBounds.xMax - canvasBounds.xMin)) * cw;
-        const cy = ch - ((y - canvasBounds.yMin) / (canvasBounds.yMax - canvasBounds.yMin)) * ch;
+        const cw = canvas.width || 600;
+        const ch = canvas.height || 310;
+        const rangeX = (canvasBounds.xMax - canvasBounds.xMin) || 1;
+        const rangeY = (canvasBounds.yMax - canvasBounds.yMin) || 1;
+        const cx = ((x - canvasBounds.xMin) / rangeX) * cw;
+        const cy = ch - ((y - canvasBounds.yMin) / rangeY) * ch;
         return { cx, cy };
     }
 
     function resizeCanvas() {
+        if (!canvas) return;
         const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width * window.devicePixelRatio || 560;
-        canvas.height = rect.height * window.devicePixelRatio || 340;
+        const dpr = window.devicePixelRatio || 1;
+        const w = (rect && rect.width > 0) ? rect.width : (canvas.parentElement ? canvas.parentElement.clientWidth : 560);
+        const h = (rect && rect.height > 0) ? rect.height : 310;
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
     }
+
     window.addEventListener('resize', () => {
         resizeCanvas();
         drawFeatureMap();
@@ -122,26 +147,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 2. Draw 2D Feature Space Map
     function drawFeatureMap() {
-        if (!mapData || !ctx) return;
-        const cw = canvas.width;
-        const ch = canvas.height;
-        ctx.clearRect(0, 0, cw, ch);
+        if (!mapData || !ctx || !canvas) return;
+        if (canvas.width === 0 || canvas.height === 0) {
+            resizeCanvas();
+        }
+        const width = canvas.width || 600;
+        const height = canvas.height || 310;
+        const dpr = window.devicePixelRatio || 1;
 
-        // Draw subtle grid
+        ctx.clearRect(0, 0, width, height);
+
+        // Background
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(0, 0, width, height);
+
+        // Subtle Grid
         ctx.strokeStyle = '#1E293B';
         ctx.lineWidth = 1;
-        for (let x = 0; x < cw; x += 40) {
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ch); ctx.stroke();
+        const gridStep = Math.max(30, Math.round(40 * dpr));
+        for (let x = 0; x < width; x += gridStep) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
         }
-        for (let y = 0; y < ch; y += 40) {
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cw, y); ctx.stroke();
+        for (let y = 0; y < height; y += gridStep) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
         }
 
-        // Draw connecting rays & radius circle if Query active
-        if (query2D && activeNeighbors.length > 0) {
+        // Connecting rays & radius circle if Query active
+        if (query2D && activeNeighbors && activeNeighbors.length > 0) {
             const qPt = toCanvasCoords(query2D[0], query2D[1]);
             
-            // Max neighbor distance for radius circle
             let maxCanvasDist = 0;
             activeNeighbors.forEach(n => {
                 const nPt = toCanvasCoords(n.x2d, n.y2d);
@@ -153,8 +187,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.moveTo(qPt.cx, qPt.cy);
                 ctx.lineTo(nPt.cx, nPt.cy);
                 ctx.strokeStyle = n.color || '#3B82F6';
-                ctx.lineWidth = 1.8;
-                ctx.setLineDash([4, 4]);
+                ctx.lineWidth = 2 * dpr;
+                ctx.setLineDash([5, 5]);
                 ctx.stroke();
                 ctx.setLineDash([]);
             });
@@ -162,28 +196,31 @@ document.addEventListener('DOMContentLoaded', () => {
             // Enclosing Neighborhood Circle
             if (maxCanvasDist > 0) {
                 ctx.beginPath();
-                ctx.arc(qPt.cx, qPt.cy, maxCanvasDist + 8, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+                ctx.arc(qPt.cx, qPt.cy, maxCanvasDist + (8 * dpr), 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.12)';
                 ctx.fill();
-                ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
-                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = 'rgba(59, 130, 246, 0.5)';
+                ctx.lineWidth = 1.5 * dpr;
                 ctx.stroke();
             }
         }
 
         // Draw all training cluster points
+        const ptRadius = 3.5 * dpr;
+        const neighborRadius = 6.5 * dpr;
+
         mapData.points.forEach(p => {
             const pt = toCanvasCoords(p.x, p.y);
             const isNeighbor = activeNeighbors.some(n => n.index === p.index);
 
             ctx.beginPath();
-            ctx.arc(pt.cx, pt.cy, isNeighbor ? 5.5 : 3.5, 0, Math.PI * 2);
-            ctx.fillStyle = p.color;
+            ctx.arc(pt.cx, pt.cy, isNeighbor ? neighborRadius : ptRadius, 0, Math.PI * 2);
+            ctx.fillStyle = p.color || '#3B82F6';
             ctx.fill();
 
             if (isNeighbor) {
                 ctx.strokeStyle = '#FFFFFF';
-                ctx.lineWidth = 2;
+                ctx.lineWidth = 2.5 * dpr;
                 ctx.stroke();
             }
         });
@@ -194,37 +231,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Outer glow pulse
             ctx.beginPath();
-            ctx.arc(qPt.cx, qPt.cy, 12, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(234, 179, 8, 0.25)';
+            ctx.arc(qPt.cx, qPt.cy, 14 * dpr, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(234, 179, 8, 0.3)';
             ctx.fill();
 
             // Inner target
             ctx.beginPath();
-            ctx.arc(qPt.cx, qPt.cy, 7, 0, Math.PI * 2);
+            ctx.arc(qPt.cx, qPt.cy, 7 * dpr, 0, Math.PI * 2);
             ctx.fillStyle = '#EAB308';
             ctx.fill();
             ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = 2.5 * dpr;
             ctx.stroke();
 
             // Label
             ctx.fillStyle = '#F8FAFC';
-            ctx.font = 'bold 12px Inter, sans-serif';
-            ctx.fillText('Query (Q)', qPt.cx + 10, qPt.cy - 6);
+            ctx.font = `bold ${Math.round(12 * dpr)}px Inter, sans-serif`;
+            ctx.fillText('Query (Q)', qPt.cx + (10 * dpr), qPt.cy - (6 * dpr));
         }
     }
 
     // 3. Canvas Hover Tooltip
     canvas.addEventListener('mousemove', (e) => {
-        if (!mapData) return;
+        if (!mapData || !mapData.points) return;
         const rect = canvas.getBoundingClientRect();
-        const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
-        const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+        const dpr = window.devicePixelRatio || 1;
+        const mouseCanvasX = (e.clientX - rect.left) * dpr;
+        const mouseCanvasY = (e.clientY - rect.top) * dpr;
+        const hitRadius = 12 * dpr;
 
         let found = null;
-        for (const p of mapData.points) {
+        for (let i = 0; i < mapData.points.length; i++) {
+            const p = mapData.points[i];
             const pt = toCanvasCoords(p.x, p.y);
-            if (Math.hypot(mouseX - pt.cx, mouseY - pt.cy) < 10) {
+            if (Math.hypot(mouseCanvasX - pt.cx, mouseCanvasY - pt.cy) < hitRadius) {
                 found = p;
                 break;
             }
@@ -232,15 +272,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (found) {
             tooltip.classList.remove('hidden');
-            tooltip.style.left = `${e.clientX - rect.left + 12}px`;
-            tooltip.style.top = `${e.clientY - rect.top + 12}px`;
+            tooltip.style.left = `${e.clientX - rect.left + 14}px`;
+            tooltip.style.top = `${e.clientY - rect.top + 14}px`;
             tooltip.textContent = `${found.name} (x: ${found.x}, y: ${found.y})`;
         } else {
             tooltip.classList.add('hidden');
         }
     });
 
-    canvas.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
+    canvas.addEventListener('mouseleave', () => {
+        if (tooltip) tooltip.classList.add('hidden');
+    });
 
     // Helper: Base64 data URL to File object
     function dataURLtoFile(dataurl, filename) {
