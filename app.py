@@ -30,14 +30,21 @@ class PrefixMiddleware(object):
 
     def __call__(self, environ, start_response):
         path = environ.get("PATH_INFO", "")
-        if path.startswith("/api/index.py"):
-            path = path[len("/api/index.py"):] or "/"
-        elif path.startswith("/api/index"):
-            path = path[len("/api/index"):] or "/"
+        for prefix in ["/api/index.py", "/api/index", "/api"]:
+            if path.startswith(prefix):
+                path = path[len(prefix):] or "/"
+                break
         environ["PATH_INFO"] = path
         return self.wsgi_app(environ, start_response)
 
 app.wsgi_app = PrefixMiddleware(app.wsgi_app)
+
+@app.after_request
+def after_request(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-Requested-With"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    return response
 
 # 52 Category Color Palette
 CLASS_COLORS_DEFAULT = {
@@ -185,10 +192,13 @@ def index():
     return render_template("index.html", samples=PRE_CACHED_SAMPLES)
 
 
-@app.route("/api/feature_map", methods=["GET"])
-@app.route("/feature_map", methods=["GET"])
+@app.route("/api/feature_map", methods=["GET", "OPTIONS"])
+@app.route("/feature_map", methods=["GET", "OPTIONS"])
 def get_feature_map():
     """Returns static 2D coordinates for canvas display."""
+    if request.method == "OPTIONS":
+        return jsonify({"success": True}), 200
+
     points = []
     for i in range(len(X_2d_sub)):
         lbl = str(y_2d_sub[i])
@@ -207,10 +217,12 @@ def get_feature_map():
     })
 
 
-@app.route("/api/samples", methods=["GET"])
-@app.route("/samples", methods=["GET"])
+@app.route("/api/samples", methods=["GET", "OPTIONS"])
+@app.route("/samples", methods=["GET", "OPTIONS"])
 def get_samples():
     """Returns curated subset of quick test sample chips with embedded base64 data URIs."""
+    if request.method == "OPTIONS":
+        return jsonify({"success": True}), 200
     return jsonify({"samples": PRE_CACHED_SAMPLES})
 
 
@@ -226,17 +238,19 @@ def serve_sample(filename):
     return send_from_directory(SAMPLES_DIR, filename)
 
 
-@app.route("/predict", methods=["POST"])
-@app.route("/api/predict", methods=["POST"])
+@app.route("/predict", methods=["POST", "OPTIONS"])
+@app.route("/api/predict", methods=["POST", "OPTIONS"])
 def predict():
+    if request.method == "OPTIONS":
+        return jsonify({"success": True}), 200
+
     t0 = time.perf_counter()
-    
     img = None
     k_val = 3
     metric = "cosine"
     weights = "distance"
 
-    # 1. Parse Multipart Form Data or JSON Payload
+    # 1. Parse JSON Payload or Multipart Form Data
     if request.is_json:
         data_json = request.get_json(silent=True) or {}
         b64_str = data_json.get("image_b64", "")
@@ -250,8 +264,8 @@ def predict():
                 return jsonify({"success": False, "error": f"Invalid base64 image: {str(e)}"}), 400
 
         k_val = int(data_json.get("k", 3))
-        metric = data_json.get("metric", "cosine").lower()
-        weights = data_json.get("weights", "distance").lower()
+        metric = str(data_json.get("metric", "cosine")).lower()
+        weights = str(data_json.get("weights", "distance")).lower()
 
     elif "image" in request.files:
         file = request.files["image"]
@@ -262,8 +276,8 @@ def predict():
                 return jsonify({"success": False, "error": f"Invalid image file: {str(e)}"}), 400
 
         k_val = int(request.form.get("k", 3))
-        metric = request.form.get("metric", "cosine").lower()
-        weights = request.form.get("weights", "distance").lower()
+        metric = str(request.form.get("metric", "cosine")).lower()
+        weights = str(request.form.get("weights", "distance")).lower()
 
     if img is None:
         return jsonify({"success": False, "error": "No valid image provided."}), 400
