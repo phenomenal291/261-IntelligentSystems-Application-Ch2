@@ -1,19 +1,45 @@
 # Traffic Sign Recognition System using K-Nearest Neighbors (KNN)
 
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![Framework: Flask](https://img.shields.io/badge/framework-Flask-lightgrey.svg)](https://flask.palletsprojects.com/)
+
+An end-to-end, lightweight web application that classifies road traffic signs in real time using **Multi-Modal Feature Extraction (Global & Center HOG + Template Matching + Color Statistics + PCA)** and an interactive **K-Nearest Neighbors (KNN)** classifier.
+
 ---
 
 ## 📌 Project Overview
 
-This project demonstrates a real-world, practical use case of the K-Nearest Neighbors algorithm in intelligent transportation systems and autonomous driving:
-1. **Feature Extraction**: Raw traffic sign images are converted to grayscale and transformed into compact, gradient-orientation feature vectors using **HOG (Histogram of Oriented Gradients)** (1,568 dimensions).
-2. **Dynamic KNN Classification**: Full interactive control over:
-   - **$K$ (Number of Neighbors)**: Adjust $K \in [1, 9]$ on the fly.
-   - **Distance Metric**: Switch between Euclidean ($L_2$), Manhattan ($L_1$), and Cosine Distance.
-   - **Voting Scheme**: Switch between Distance-Weighted ($w_i = 1/d_i$) and Uniform Majority voting.
-3. **Educational Insights**:
-   - **HOG Feature Visualizer**: Inspect the raw input sign vs. its computed HOG gradient orientation map.
-   - **Top-$K$ Nearest Training Exemplars Gallery**: Visually displays the actual $K$ nearest training images retrieved from the training set, with their Euclidean distances and vote weights.
-4. **Intuitive User Interface**: Drag-and-drop, 1-click test samples, and **direct clipboard paste (`Ctrl+V`)** support.
+This project demonstrates a real-world, practical computer vision application of the K-Nearest Neighbors algorithm:
+1. **Dataset**: Trained on **5,683 real-world traffic sign images** across **52 distinct classes** from the Kaggle Traffic Signs Dataset (`tuanai/traffic-signs-dataset`).
+2. **Multi-Modal Feature Engineering**:
+   - **Global HOG ($64\times 64$)**: Extracts outer boundary geometry and geometric contour.
+   - **Center Crop HOG ($36\times 36$)**: Captures inner glyphs, digits (speed limits), and arrows.
+   - **Normalized Center Template ($24\times 24$)**: Resolves fine numeric differences.
+   - **HSV & RGB Statistics**: Hue histograms, saturation, and color masks to distinguish red, blue, and yellow traffic signs.
+   - **PCA Dimensionality Reduction ($n=384$)**: Filters noise and compresses payload to **10.5 MB** for instant serverless startup.
+3. **Dynamic KNN Hyperparameter Controls**:
+   - **$K$ (Number of Neighbors)**: Slider range $K \in [1, 45]$ with instant presets ($K=1, 3, 7, 15, 25, 45$).
+   - **Distance Metric**: Euclidean ($L_2$), Manhattan ($L_1$), and Cosine Distance.
+   - **Voting Scheme**: Distance-Weighted ($w_i = 1/d_i$) and Uniform Majority voting.
+4. **Interactive Visualizations**:
+   - **2D PCA Feature Space Canvas**: Interactive 2D projection with query rays and neighbor radius bounding circle.
+   - **HOG Feature Map Visualizer**: Real-time gradient orientation map rendering.
+   - **Dual Voting Comparison**: Side-by-side breakdown of Uniform vs. Distance-weighted confidence.
+   - **Nearest Neighbors Gallery**: Exemplar cards with thumbnail images, distances, and vote weights.
+
+---
+
+## 🚦 Model Performance
+
+- **Training Samples**: 5,683 images
+- **Test Validation Set**: 433 images
+- **Accuracy**:
+  - $K=1$: **94.00%**
+  - $K=3$: **93.53%**
+  - $K=5$: **92.84%**
+  - $K=7$: **91.92%**
+- **Inference Latency**: **~15 - 35 ms** per image
 
 ---
 
@@ -22,47 +48,22 @@ This project demonstrates a real-world, practical use case of the K-Nearest Neig
 ```
 traffic_sign_knn_app/
 ├── data/
-│   ├── train/                 # Labeled training images organized by class (350 samples)
-│   └── test_samples/          # Quick test samples for 1-click evaluation
+│   └── test_samples/          # Curated quick test sample images for 1-click evaluation
 ├── models/
-│   └── knn_traffic_sign_model.pkl  # Trained KNN feature vectors & exemplar metadata
+│   └── knn_traffic_sign_model.pkl  # Compressed pre-trained KNN & PCA model (10.5 MB)
 ├── static/
 │   ├── css/
-│   │   └── style.css          # Minimalist responsive UI styling
+│   │   └── style.css          # Modern dark-mode responsive UI styling
 │   └── js/
-│       └── script.js          # Asynchronous upload, paste (Ctrl+V), & dynamic KNN client
+│       └── script.js          # Interactive canvas, clipboard paste, & AJAX inference client
 ├── templates/
-│   └── index.html             # Semantic HTML5 drag-and-drop & paste interface
-├── train.py                   # Standalone feature extraction & model training script
-├── app.py                     # Lightweight Flask inference server with dynamic parameters
-├── generate_dataset.py        # Synthetic traffic sign dataset generator
+│   └── index.html             # Semantic drag-and-drop & paste interface
+├── train.py                   # Model training and feature extraction pipeline
+├── app.py                     # High-performance Flask inference server
 ├── requirements.txt           # Python package dependencies
-├── .gitignore                 # Git ignore rules
+├── vercel.json                # Vercel serverless deployment configuration
 └── README.md                  # Project documentation & reproduction guide
 ```
-
----
-
-## 🚦 Supported Traffic Sign Classes
-
-The system recognizes 10 standard traffic sign categories:
-1. **Stop Sign** (`stop`)
-2. **Speed Limit 30 km/h** (`speed_30`)
-3. **Speed Limit 50 km/h** (`speed_50`)
-4. **Speed Limit 80 km/h** (`speed_80`)
-5. **Yield / Give Way** (`yield`)
-6. **No Entry** (`no_entry`)
-7. **Turn Right Ahead** (`turn_right`)
-8. **Turn Left Ahead** (`turn_left`)
-9. **Ahead Only** (`ahead_only`)
-10. **Pedestrian Crossing** (`pedestrian`)
-
----
-
-## ⚙️ Prerequisites
-
-- **Python Version**: Python `3.9`, `3.10`, `3.11`, `3.12`, or `3.13`
-- **OS**: Linux, macOS, or Windows
 
 ---
 
@@ -70,19 +71,14 @@ The system recognizes 10 standard traffic sign categories:
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/phenomenal291/261-IntelligentSystems-Application-Ch2
+git clone https://github.com/phenomenal291/261-IntelligentSystems-Application-Ch2.git
 cd 261-IntelligentSystems-Application-Ch2
 ```
 
 ### 2. Set Up Virtual Environment (Recommended)
 ```bash
-# On Linux / macOS:
 python3 -m venv venv
 source venv/bin/activate
-
-# On Windows:
-python -m venv venv
-venv\Scripts\activate
 ```
 
 ### 3. Install Dependencies
@@ -91,7 +87,7 @@ pip install -r requirements.txt
 ```
 
 ### 4. (Optional) Re-train the Model
-The pre-trained model payload is included in `models/knn_traffic_sign_model.pkl`. To re-train:
+The pre-trained model is already included in `models/knn_traffic_sign_model.pkl`. To re-train:
 ```bash
 python train.py
 ```
@@ -101,59 +97,10 @@ python train.py
 python app.py
 ```
 
-### 6. Access the Localhost Application
-Open your web browser and navigate to:
-```
-http://127.0.0.1:5000
-```
-
----
-
-## 🌐 Web Interface Features
-
-- **Clipboard Paste (`Ctrl+V` / `Cmd+V`)**: Copy any traffic sign image from the web or screenshot tool and paste it directly onto the page.
-- **Drag & Drop Upload**: Drag any PNG/JPG traffic sign image directly onto the drop zone or browse local files.
-- **1-Click Test Samples**: Instantly test preloaded signs (Stop, Speed Limits, Yield, Arrows, etc.).
-- **Live Hyperparameter Tuning**: Adjust $K$, distance metric (Euclidean, Manhattan, Cosine), and voting scheme with immediate dynamic re-evaluation.
-- **Top-$K$ Exemplars Gallery**: Visually displays the $K$ closest training images retrieved from the training set, their distance $d(Q, P_i)$, and vote weights.
-
----
-
-## 📡 REST API Documentation
-
-### `POST /predict`
-- **Request Form Data**:
-  - `image`: Binary image file (PNG/JPG)
-  - `k`: Number of neighbors (Integer, e.g. `3`, `5`, `7`)
-  - `metric`: Distance metric (`"euclidean"`, `"manhattan"`, `"cosine"`)
-  - `weights`: Voting scheme (`"distance"`, `"uniform"`)
-- **Response**:
-```json
-{
-  "success": true,
-  "predicted_class": "Stop Sign",
-  "class_key": "stop",
-  "confidence": 100.0,
-  "inference_time_ms": 6.8,
-  "k": 3,
-  "metric": "euclidean",
-  "weights": "distance",
-  "hog_image_b64": "...",
-  "neighbors": [
-    {
-      "rank": 1,
-      "class_name": "Stop Sign",
-      "class_key": "stop",
-      "distance": 2.248,
-      "weight": 0.445,
-      "image_b64": "..."
-    }
-  ]
-}
-```
+Open your browser at `http://127.0.0.1:5000`.
 
 ---
 
 ## 🎓 Academic Context
 
-Developed for **CO3061: Intelligent Systems** at **Ho Chi Minh City University of Technology (HCMUT)** to demonstrate practical instance-based learning (K-Nearest Neighbors) combined with classical computer vision feature descriptors.
+Developed for **CO3061: Intelligent Systems (Hệ thống Thông minh)** at **Ho Chi Minh City University of Technology (HCMUT)**.
